@@ -6,6 +6,7 @@ import (
 
 	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
+	"github.com/benkamin03/prism/internal/orchestrator"
 	"github.com/labstack/echo/v4"
 )
 
@@ -32,6 +33,11 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	minio.SetupRoutes(&minio.MinioRoutesConfig{
 		MinioClient: routesConfig.MinioClient,
 		Echo:        e,
+	})
+
+	orchestrator.SetupRoutes(&orchestrator.OrchestratorRoutesConfig{
+		Echo:        e,
+		MinioClient: routesConfig.MinioClient,
 	})
 
 	infisical.SetupRoutes(&infisical.InfisicalRoutesConfig{
