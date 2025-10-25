@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { Octokit } from "octokit";
 import { env } from "@/env";
 
-const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+export const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   const session = await auth();
   if (!session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -26,8 +26,10 @@ const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const isExpired =
     typeof account.expires_at === "number" && account.expires_at !== null
-      ? nowSeconds >= account.expires_at - 60 // 60s safety window
+      ? nowSeconds >= account.expires_at - 60 // safety window
       : false;
+
+  let accessTokenToUse = account.access_token ?? undefined;
 
   if (isExpired) {
     if (!account.refresh_token) {
@@ -36,9 +38,6 @@ const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
         message: "Missing refresh token",
       });
     }
-
-    // Do not authenticate this request with an expired token; client credentials are sufficient
-    const octokit = new Octokit();
 
     try {
       type GitHubRefreshResponse = {
@@ -50,18 +49,28 @@ const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
         refresh_token_expires_in?: number;
       };
 
-      const tokenResponse = await octokit.request(
-        "POST /login/oauth/access_token",
+      const tokenRes = await fetch(
+        "https://github.com/login/oauth/access_token",
         {
-          client_id: env.GITHUB_CLIENT_ID,
-          client_secret: env.GITHUB_CLIENT_SECRET,
-          grant_type: "refresh_token",
-          refresh_token: account.refresh_token,
-          headers: { Accept: "application/json" },
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body: new URLSearchParams({
+            client_id: env.GITHUB_CLIENT_ID,
+            client_secret: env.GITHUB_CLIENT_SECRET,
+            grant_type: "refresh_token",
+            refresh_token: account.refresh_token,
+          }),
         },
       );
 
-      const data = (tokenResponse as { data: GitHubRefreshResponse }).data;
+      if (!tokenRes.ok) {
+        throw new Error(`GitHub refresh HTTP ${tokenRes.status}`);
+      }
+
+      const data = (await tokenRes.json()) as GitHubRefreshResponse;
       const {
         access_token: newAccessToken,
         token_type,
@@ -111,6 +120,9 @@ const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
             eq(accounts.provider, "github"),
           ),
         );
+
+      accessTokenToUse = newAccessToken;
+      account.access_token = newAccessToken;
     } catch (err) {
       console.error("GitHub token refresh error:", err);
       throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -120,26 +132,14 @@ const githubProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   return next({
     ctx: {
       session: session,
-      accessToken: account.access_token,
+      accessToken: accessTokenToUse,
     },
   });
 });
 
 export const githubRouter = createTRPCRouter({
-  getUserRepos: githubProcedure.query(async ({ ctx }) => {
-    const session = ctx.session;
-    const account = await ctx.db.query.accounts.findFirst({
-      where: and(
-        eq(accounts.userId, session.user.id),
-        eq(accounts.provider, "github"),
-      ),
-    });
-
-    if (!account?.access_token) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
-    }
-
-    const octokit = new Octokit({ auth: account.access_token });
+  getUserRepos: githubProcedure.query(async ({ ctx: { accessToken } }) => {
+    const octokit = new Octokit({ auth: accessToken });
 
     const repos = await octokit.paginate("GET /user/repos", {
       per_page: 100,

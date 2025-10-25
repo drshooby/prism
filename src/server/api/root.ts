@@ -1,6 +1,8 @@
 import { postRouter } from "@/server/api/routers/post";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import { githubRouter } from "@/server/api/routers/github";
+import { terraformRouter } from "@/server/api/routers/terraform";
+import { projectsRouter } from "./routers/projects";
 
 /**
  * This is the primary router for your server.
@@ -10,6 +12,8 @@ import { githubRouter } from "@/server/api/routers/github";
 export const appRouter = createTRPCRouter({
   post: postRouter,
   github: githubRouter,
+  terraform: terraformRouter,
+  projects: projectsRouter,
 });
 
 // export type definition of API
