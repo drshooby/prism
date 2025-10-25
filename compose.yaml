@@ -15,7 +15,7 @@ services:
     image: infisical/infisical:latest-postgres
     container_name: infisical-backend
     ports:
-      - "9999:8080"
+      - "8080:8080"
     environment:
       NODE_ENV: production
       ENCRYPTION_KEY: 7a61cdc5a18fd9d1cc5f00d8202abd8f
@@ -29,7 +29,11 @@ services:
         condition: service_started
     networks:
       - backend
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   infisical-redis:
     image: redis:8
@@ -40,7 +44,6 @@ services:
       - infisical-redis-data:/data
     networks:
       - backend
-    restart: unless-stopped
 
   infisical-db:
     image: postgres:18-alpine
@@ -58,7 +61,6 @@ services:
       - infisical-db-data:/var/lib/postgresql
     networks:
       - backend
-    restart: unless-stopped
 
   echo-app:
     build:
@@ -72,14 +74,17 @@ services:
       DB_PASSWORD: test
       DB_NAME: prism
       DB_PORT: 5432
+    env_file:
+      - .env
     depends_on:
       database:
         condition: service_healthy
       minio:
         condition: service_started
+      infisical-secrets-manager:
+        condition: service_healthy
     networks:
       - backend
-    restart: unless-stopped
 
   database:
     image: postgres:18.0
