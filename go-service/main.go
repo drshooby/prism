@@ -2,21 +2,92 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
+	"os"
 
+	"github.com/benkamin03/prism/internal/minio"
 	infisical "github.com/infisical/go-sdk"
 	"github.com/labstack/echo/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func main() {
-	e := echo.New()
+// Environment holds all configuration loaded from environment variables
+type Environment struct {
+	// Infisical (required in production)
+	InfisicalClientID     string
+	InfisicalClientSecret string
+	InfisicalSiteURL      string
 
-	// Hardcoded connection info (fine for hackathon use)
-	dsn := "host=database user=postgres password=test dbname=prism port=5432 sslmode=disable"
+	// MinIO (with defaults for development)
+	MinioEndpoint        string
+	MinioAccessKeyID     string
+	MinioSecretAccessKey string
+	MinioUseSSL          bool
+
+	// Database (with defaults for development)
+	DBHost     string
+	DBUser     string
+	DBPassword string
+	DBName     string
+	DBPort     string
+}
+
+// Global environment configuration accessible throughout the package
+var env *Environment
+
+type Clients struct {
+	DatabaseClient *gorm.DB
+	MinioClient    minio.MinioClient
+}
+
+// getEnv retrieves an environment variable or returns a default value
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// loadEnvironment loads and validates all environment variables
+func loadEnvironment() *Environment {
+	// Required fields (no defaults)
+	infisicalClientID := os.Getenv("INFISICAL_CLIENT_ID")
+	if infisicalClientID == "" {
+		log.Fatal("❌ INFISICAL_CLIENT_ID environment variable is required")
+	}
+
+	infisicalClientSecret := os.Getenv("INFISICAL_CLIENT_SECRET")
+	if infisicalClientSecret == "" {
+		log.Fatal("❌ INFISICAL_CLIENT_SECRET environment variable is required")
+	}
+
+	return &Environment{
+		// Infisical
+		InfisicalClientID:     infisicalClientID,
+		InfisicalClientSecret: infisicalClientSecret,
+		InfisicalSiteURL:      getEnv("INFISICAL_SITE_URL", "http://infisical-backend:8080"),
+
+		// MinIO
+		MinioEndpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
+		MinioAccessKeyID:     getEnv("MINIO_ACCESS_KEY_ID", "minio-admin"),
+		MinioSecretAccessKey: getEnv("MINIO_SECRET_ACCESS_KEY", "minio-admin-password"),
+		MinioUseSSL:          false,
+
+		// Database
+		DBHost:     getEnv("DB_HOST", "database"),
+		DBUser:     getEnv("DB_USER", "postgres"),
+		DBPassword: getEnv("DB_PASSWORD", "test"),
+		DBName:     getEnv("DB_NAME", "prism"),
+		DBPort:     getEnv("DB_PORT", "5432"),
+	}
+}
+
+func setupDatabaseClient() *sql.DB {
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		env.DBHost, env.DBUser, env.DBPassword, env.DBName, env.DBPort)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -33,21 +104,12 @@ func main() {
 	}
 
 	log.Println("✅ Connected to PostgreSQL successfully")
+	return sqlDB
+}
 
-	// Routes
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
-	})
-
-	e.GET("/dbcheck", func(c echo.Context) error {
-		if err := sqlDB.Ping(); err != nil {
-			return c.String(http.StatusInternalServerError, "❌ DB not reachable")
-		}
-		return c.String(http.StatusOK, "✅ DB connection OK")
-	})
-
+func setupInfisicalClient() infisical.InfisicalClientInterface {
 	client := infisical.NewInfisicalClient(context.Background(), infisical.Config{
-		SiteUrl: "http://infisical-backend:8080",
+		SiteUrl: env.InfisicalSiteURL,
 	})
 
 	// For machine identity (what go sdk uses)
@@ -56,22 +118,48 @@ func main() {
 	// 3. Org -> Access Control -> Identities -> Click Identity -> Universal Auth
 	// -> Copy Client ID -> Create Client Secret -> Copy Client Secret
 
-	_, err = client.Auth().UniversalAuthLogin("0149ab3c-ddc4-4487-aef4-b052ddf809f6", "8920d6201a6ca6d6ad21bba940f825f1f6d2aafb8ebd5af8b97c05b26dde1098")
+	_, err := client.Auth().UniversalAuthLogin(env.InfisicalClientID, env.InfisicalClientSecret)
 	if err != nil {
 		panic(fmt.Sprintf("Authentication failed: %v", err))
 	}
 
-	e.GET("/secrets", func(c echo.Context) error {
-		testSecret, err := client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
-			SecretKey:   "testSecret",
-			Environment: "dev",
-			ProjectID:   "dec7cfaf-8b50-48b4-8577-12035f9dd954", // project settings -> copy project id
-			SecretPath:  "/",
-		})
-		if err != nil {
-			return c.String(200, fmt.Sprintf("Error: %v", err))
-		}
-		return c.String(200, fmt.Sprintf("Your secret: %s", testSecret.SecretValue))
+	log.Println("✅ Infisical client authenticated successfully")
+
+	return client
+}
+
+func setupMinioClient() *minio.MinioClient {
+	minioClient, err := minio.NewMinioClient(&minio.MinioClientConfig{
+		Endpoint:        env.MinioEndpoint,
+		AccessKeyID:     env.MinioAccessKeyID,
+		SecretAccessKey: env.MinioSecretAccessKey,
+		UseSSL:          env.MinioUseSSL,
+	})
+
+	if err != nil {
+		log.Fatalf("❌ Failed to initialize Minio client: %v", err)
+	}
+
+	log.Println("✅ Minio client initialized successfully")
+	return minioClient
+}
+
+func main() {
+	// Load environment configuration first
+	env = loadEnvironment()
+	log.Println("✅ Environment configuration loaded")
+
+	e := echo.New()
+	dbClient := setupDatabaseClient()
+	minioClient := setupMinioClient()
+	infisicalClient := setupInfisicalClient()
+
+	// Routes
+	SetupRoutes(&RoutesConfig{
+		Echo:           e,
+		DatabaseClient: dbClient,
+		InfiClient:     infisicalClient,
+		MinioClient:    *minioClient,
 	})
 
 	e.Logger.Fatal(e.Start(":1323"))
