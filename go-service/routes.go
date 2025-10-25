@@ -43,18 +43,8 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 		return c.String(200, fmt.Sprintf("Your secret: %s", testSecret.SecretValue))
 	})
 
-	e.GET("/minio", func(c echo.Context) error {
-		minioClient := routesConfig.MinioClient.Client
-		buckets, err := minioClient.ListBuckets(c.Request().Context())
-		if err != nil {
-			return c.String(500, fmt.Sprintf("Error listing buckets: %v", err))
-		}
-
-		bucketNames := "Buckets:\n"
-		for _, bucket := range buckets {
-			bucketNames += fmt.Sprintf("- %s\n", bucket.Name)
-		}
-
-		return c.String(200, bucketNames)
+	minio.SetupRoutes(&minio.MinioRoutesConfig{
+		MinioClient: routesConfig.MinioClient,
+		Echo:        e,
 	})
 }
