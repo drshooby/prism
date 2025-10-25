@@ -31,6 +31,9 @@ Before running the full application, you need to set up Infisical for secrets ma
    - Copy the **Client ID** and create a **Client Secret**, then copy it
    - Add these values to your `.env` file as `INFISICAL_CLIENT_ID` and `INFISICAL_CLIENT_SECRET`
 
+4. Create a new Project "prism-internal"
+5. Create a new key/value secret under the "Development" environment
+
 ### Running the Application
 
 Once Infisical is configured, start all services:

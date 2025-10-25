@@ -2,37 +2,43 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 
+	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
 )
 
 type Orchestrator struct {
-	repoURL     string
-	gitHubToken string
-	userID      string
-	minioClient minio.MinioClient
-	context     context.Context
+	repoURL         string
+	gitHubToken     string
+	userID          string
+	minioClient     minio.MinioClient
+	infisicalClient infisical.InfisicalClient
+	context         context.Context
 }
 
 type NewOrchestratorInput struct {
-	repoURL     string
-	gitHubToken string
-	userID      string
-	minioClient minio.MinioClient
-	context     context.Context
+	repoURL         string
+	gitHubToken     string
+	userID          string
+	minioClient     minio.MinioClient
+	infisicalClient *infisical.InfisicalClient
+	context         context.Context
 }
 
 func NewOrchestrator(config *NewOrchestratorInput) *Orchestrator {
 	return &Orchestrator{
-		repoURL:     config.repoURL,
-		gitHubToken: config.gitHubToken,
-		userID:      config.userID,
-		minioClient: config.minioClient,
-		context:     config.context,
+		repoURL:         config.repoURL,
+		gitHubToken:     config.gitHubToken,
+		userID:          config.userID,
+		minioClient:     config.minioClient,
+		infisicalClient: *config.infisicalClient,
+		context:         config.context,
 	}
 }
 
@@ -77,25 +83,75 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	return nil
 }
 
-func (o *Orchestrator) Plan() error {
+func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	// Clone and navigate to the repository
 	if err := o.cloneAndNavigateToRepo(); err != nil {
-		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
 	log.Printf("Successfully cloned and navigated to repo")
 
 	// Check if the bucket exists, if not create it
-	log.Printf("Bucket name: %s", o.userID)
-	log.Printf("Minio client: %v", o.minioClient)
 	bucket, err := o.minioClient.GetOrCreateBucket(o.context, o.userID)
 	if err != nil {
-		return fmt.Errorf("error in GetOrCreateBucket: %w", err)
+		return nil, fmt.Errorf("error in GetOrCreateBucket: %w", err)
 	}
 
 	// Download or create the terraform.tfstate file
 	if err := o.downloadOrCreateTFStateFile(bucket.Name); err != nil {
-		return fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
+		return nil, fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
 	}
 
-	return nil
+	// Fetch and inject the secrets into the environment
+	secretsResponse := o.infisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
+		Environment: "Development",
+		ProjectID:   "prism-internal",
+		SecretPath:  fmt.Sprintf("/users/%s/", o.userID),
+	})
+	if secretsResponse.StatusCode != http.StatusOK || secretsResponse.Error != "" {
+		return nil, fmt.Errorf("failed to fetch secrets (status code %d): %s", secretsResponse.StatusCode, secretsResponse.Error)
+	}
+	log.Printf("Fetched secrets from Infisical: %v", secretsResponse.Secrets)
+
+	// Inject the secret key/value pairs into the environment
+	for key, value := range secretsResponse.Secrets {
+		log.Printf("Injecting secret into environment: %s", key)
+		if err := os.Setenv(key, value); err != nil {
+			return nil, fmt.Errorf("failed to set secret env %s: %w", key, err)
+		}
+	}
+
+	// Run terraform plan
+	cmd := exec.Command("terraform", "init")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform init failed: %s, %w", string(output), err)
+	}
+
+	cmd = exec.Command("terraform", "plan", "-no-color", "-input=false", "-out=tfplan")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform plan failed: %s, %w", string(output), err)
+	}
+
+	log.Printf("Terraform plan executed successfully")
+
+	// Convert the plan to json
+	cmd = exec.Command("terraform", "show", "-json", "tfplan", "|", "jq", "|", ">", "plan.json")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform show -json failed: %s, %w", string(output), err)
+	} else {
+		log.Printf("Terraform plan in JSON format:\n%s", string(output))
+	}
+
+	// Read the JSON file and log its content
+	planFileContent, err := os.ReadFile("plan.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plan.json: %w", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(planFileContent, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal plan.json: %w", err)
+	}
+
+	log.Printf("Terraform Plan JSON Content: %v", response)
+	return response, nil
 }

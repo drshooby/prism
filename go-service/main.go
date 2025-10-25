@@ -148,10 +148,11 @@ func main() {
 	infisicalClient := setupInfisicalClient()
 
 	// Routes
+	log.Printf("infisicalClient (from main): %+v", infisicalClient)
 	SetupRoutes(&RoutesConfig{
 		Echo:            e,
 		DatabaseClient:  dbClient,
-		InfisicalClient: *infisicalClient,
+		InfisicalClient: infisicalClient,
 		MinioClient:     *minioClient,
 	})
 

@@ -25,9 +25,9 @@ type InfisicalClient struct {
 }
 
 type GetSecretResponse struct {
-	Secrets    []string `json:"secret"`
-	StatusCode int      `json:"statusCode"`
-	Error      string   `json:"error,omitempty"`
+	Secrets    map[string]string `json:"secret"`
+	StatusCode int               `json:"statusCode"`
+	Error      string            `json:"error,omitempty"`
 }
 
 func NewInfisicalClient(config *InfisicalClientConfig) (*InfisicalClient, error) {
@@ -73,13 +73,13 @@ func (infisicalClient InfisicalClient) ListSecrets(options *InfisicalSecretOptio
 		}
 	}
 
-	secretValues := make([]string, len(secrets))
-	for i, s := range secrets {
-		secretValues[i] = s.SecretValue
+	secretsMap := make(map[string]string, len(secrets))
+	for _, s := range secrets {
+		secretsMap[s.SecretKey] = s.SecretValue
 	}
 
 	return &GetSecretResponse{
-		Secrets:    secretValues,
+		Secrets:    secretsMap,
 		StatusCode: 200,
 	}
 }

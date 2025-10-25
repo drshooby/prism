@@ -13,7 +13,7 @@ import (
 type RoutesConfig struct {
 	Echo            *echo.Echo
 	DatabaseClient  *sql.DB
-	InfisicalClient infisical.InfisicalClient
+	InfisicalClient *infisical.InfisicalClient
 	MinioClient     minio.MinioClient
 }
 
@@ -36,8 +36,9 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	})
 
 	orchestrator.SetupRoutes(&orchestrator.OrchestratorRoutesConfig{
-		Echo:        e,
-		MinioClient: routesConfig.MinioClient,
+		Echo:            e,
+		MinioClient:     routesConfig.MinioClient,
+		InfisicalClient: routesConfig.InfisicalClient,
 	})
 
 	infisical.SetupRoutes(&infisical.InfisicalRoutesConfig{

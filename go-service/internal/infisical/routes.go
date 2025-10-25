@@ -8,7 +8,7 @@ import (
 )
 
 type InfisicalRoutesConfig struct {
-	InfisicalClient InfisicalClient
+	InfisicalClient *InfisicalClient
 	Echo            *echo.Echo
 }
 
