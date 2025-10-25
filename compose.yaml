@@ -10,13 +10,62 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - backend
+  
+  infisical-secrets-manager:
+    image: infisical/infisical:latest-postgres
+    container_name: infisical-backend
+    ports:
+      - "9999:8080"
+    environment:
+      NODE_ENV: production
+      ENCRYPTION_KEY: 7a61cdc5a18fd9d1cc5f00d8202abd8f
+      AUTH_SECRET: 05385f6703a5c724f379af5c7d1eb57e
+      DB_CONNECTION_URI: postgresql://postgres:secondpass@infisical-db:5432/second_db
+      REDIS_URL: redis://infisical-redis:6379
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_started
+    networks:
+      - backend
+    restart: unless-stopped
+
+  infisical-redis:
+    image: redis:8
+    container_name: infisical-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - infisical-redis-data:/data
+    networks:
+      - backend
+    restart: unless-stopped
+
+  infisical-db:
+    image: postgres:18-alpine
+    container_name: infisical-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secondpass
+      POSTGRES_DB: second_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=postgres && psql --username=postgres --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - infisical-db-data:/var/lib/postgresql
+    networks:
+      - backend
+    restart: unless-stopped
 
   echo-app:
     build:
       context: ./go-service/
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "1323:1323"
     environment:
       DB_HOST: database
       DB_USER: postgres
@@ -38,7 +87,7 @@ services:
     user: postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: test        # ✅ correct var name
+      POSTGRES_PASSWORD: test
       POSTGRES_DB: prism
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d prism"]
@@ -77,6 +126,8 @@ services:
 
 volumes:
   database-data:
+  infisical-redis-data:
+  infisical-db-data:
 
 networks:
   backend:

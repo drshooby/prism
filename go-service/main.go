@@ -43,5 +43,5 @@ func main() {
 		return c.String(http.StatusOK, "✅ DB connection OK")
 	})
 
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":1323"))
 }
