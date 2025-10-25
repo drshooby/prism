@@ -3,9 +3,9 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/benkamin03/prism/internal/minio"
 )
@@ -37,38 +37,36 @@ func NewOrchestrator(config *NewOrchestratorInput) *Orchestrator {
 }
 
 func (o *Orchestrator) cloneAndNavigateToRepo() error {
-	dir, err := os.MkdirTemp("/var/tmp/repo", "cloned-repo-")
+	tmpDir, err := os.MkdirTemp("/var/tmp/", "cloned-repo-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	// Now go to this dir
-	if err := os.Chdir(dir); err != nil {
+	// Now go to this temporary directory
+	log.Printf("Changing to temp directory: %s", tmpDir)
+	if err := os.Chdir(tmpDir); err != nil {
 		return fmt.Errorf("failed to change dir: %w", err)
 	}
 
 	// Export GitHub token for authentication
+	log.Printf("Setting GH_TOKEN environment variable")
 	if err := os.Setenv("GH_TOKEN", o.gitHubToken); err != nil {
 		return fmt.Errorf("failed to set GH_TOKEN env: %w", err)
 	}
 
 	// Clone the repository
+	log.Printf("Cloning repository into temp directory")
 	cmd := exec.Command("git", "clone", o.repoURL, ".")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to clone repo: %s, %w", string(output), err)
 	}
-
-	segments := strings.Split(o.repoURL, "/")
-	repoName := strings.TrimSuffix(segments[len(segments)-1], ".git")
-
-	// Go to the cloned repo directory
-	os.Chdir(repoName)
 
 	return nil
 }
 
 func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	if err := o.minioClient.DownloadFileObject(o.context, bucketName, "terraform.tfstate", "terraform.tfstate"); err != nil {
+		// Create the file if it does not exist
 		if err := os.NewFile(0, "terraform.tfstate").Close(); err != nil {
 			return fmt.Errorf("error creating empty terraform.tfstate: %w", err)
 		}
@@ -79,18 +77,22 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	return nil
 }
 
-func (o *Orchestrator) Run() error {
+func (o *Orchestrator) Plan() error {
 	// Clone and navigate to the repository
 	if err := o.cloneAndNavigateToRepo(); err != nil {
 		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
+	log.Printf("Successfully cloned and navigated to repo")
 
 	// Check if the bucket exists, if not create it
+	log.Printf("Bucket name: %s", o.userID)
+	log.Printf("Minio client: %v", o.minioClient)
 	bucket, err := o.minioClient.GetOrCreateBucket(o.context, o.userID)
 	if err != nil {
 		return fmt.Errorf("error in GetOrCreateBucket: %w", err)
 	}
 
+	// Download or create the terraform.tfstate file
 	if err := o.downloadOrCreateTFStateFile(bucket.Name); err != nil {
 		return fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
 	}
