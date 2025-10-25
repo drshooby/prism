@@ -1,5 +1,10 @@
 import { relations, sql } from "drizzle-orm";
-import { index, pgTableCreator, primaryKey } from "drizzle-orm/pg-core";
+import {
+  index,
+  pgTableCreator,
+  primaryKey,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { type AdapterAccount } from "next-auth/adapters";
 
 /**
@@ -106,4 +111,52 @@ export const verificationTokens = createTable(
     expires: d.timestamp({ mode: "date", withTimezone: true }).notNull(),
   }),
   (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+);
+
+export const importedRepositories = createTable(
+  "imported_repository",
+  (d) => ({
+    id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+    userId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id),
+    repoId: d.bigint({ mode: "number" }).notNull(),
+    owner: d.text().notNull(),
+    name: d.text().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  }),
+  (t) => [
+    index("imported_repo_user_idx").on(t.userId),
+    uniqueIndex("imported_repo_repo_id_unique").on(t.repoId),
+    index("imported_repo_owner_name_idx").on(t.owner, t.name),
+  ],
+);
+
+export const terraformPlans = createTable(
+  "terraform_plan",
+  (d) => ({
+    id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+    repositoryId: d
+      .integer()
+      .notNull()
+      .references(() => importedRepositories.id),
+    commitHash: d.text().notNull(),
+    name: d.text(),
+    plan: d.jsonb().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  }),
+  (t) => [
+    index("terraform_plan_repository_id_idx").on(t.repositoryId),
+    uniqueIndex("terraform_plan_repo_commit_unique").on(
+      t.repositoryId,
+      t.commitHash,
+    ),
+  ],
 );
