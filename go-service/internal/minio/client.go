@@ -1,6 +1,8 @@
 package minio
 
 import (
+	"context"
+	"fmt"
 	"log"
 
 	"github.com/minio/minio-go/v7"
@@ -15,7 +17,13 @@ type MinioClientConfig struct {
 }
 
 type MinioClient struct {
-	Client *minio.Client
+	client *minio.Client
+}
+
+type ListBucketsResponse struct {
+	Buckets    []string `json:"buckets"`
+	StatusCode int      `json:"statusCode"`
+	Error      string   `json:"error,omitempty"`
 }
 
 func NewMinioClient(config *MinioClientConfig) (*MinioClient, error) {
@@ -28,6 +36,29 @@ func NewMinioClient(config *MinioClientConfig) (*MinioClient, error) {
 	}
 
 	return &MinioClient{
-		Client: minioClient,
+		client: minioClient,
 	}, nil
+}
+
+func (minioClient MinioClient) ListBuckets(context context.Context) *ListBucketsResponse {
+	buckets, err := minioClient.client.ListBuckets(context)
+	if err != nil {
+		return &ListBucketsResponse{
+			StatusCode: 500,
+			Error:      fmt.Sprintf("Error listing buckets: %v", err),
+		}
+	}
+
+	return &ListBucketsResponse{
+		Buckets:    extractBucketNames(buckets),
+		StatusCode: 200,
+	}
+}
+
+func extractBucketNames(buckets []minio.BucketInfo) []string {
+	bucketNames := make([]string, len(buckets))
+	for i, bucket := range buckets {
+		bucketNames[i] = bucket.Name
+	}
+	return bucketNames
 }
