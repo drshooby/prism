@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
-	infisical "github.com/infisical/go-sdk"
 	"github.com/labstack/echo/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -107,24 +106,18 @@ func setupDatabaseClient() *sql.DB {
 	return sqlDB
 }
 
-func setupInfisicalClient() infisical.InfisicalClientInterface {
-	client := infisical.NewInfisicalClient(context.Background(), infisical.Config{
-		SiteUrl: env.InfisicalSiteURL,
+func setupInfisicalClient() *infisical.InfisicalClient {
+	client, err := infisical.NewInfisicalClient(&infisical.InfisicalClientConfig{
+		SiteUrl:               env.InfisicalSiteURL,
+		InfisicalClientID:     env.InfisicalClientID,
+		InfisicalClientSecret: env.InfisicalClientSecret,
 	})
 
-	// For machine identity (what go sdk uses)
-	// 1. Org -> Access Control -> Identities -> Create Identity w/ Member Role
-	// 2. Secrets Manager -> Access Management -> Machine Identities -> Add Identity -> Select w/ Developer Role
-	// 3. Org -> Access Control -> Identities -> Click Identity -> Universal Auth
-	// -> Copy Client ID -> Create Client Secret -> Copy Client Secret
-
-	_, err := client.Auth().UniversalAuthLogin(env.InfisicalClientID, env.InfisicalClientSecret)
 	if err != nil {
 		panic(fmt.Sprintf("Authentication failed: %v", err))
 	}
 
 	log.Println("✅ Infisical client authenticated successfully")
-
 	return client
 }
 
@@ -156,10 +149,10 @@ func main() {
 
 	// Routes
 	SetupRoutes(&RoutesConfig{
-		Echo:           e,
-		DatabaseClient: dbClient,
-		InfiClient:     infisicalClient,
-		MinioClient:    *minioClient,
+		Echo:            e,
+		DatabaseClient:  dbClient,
+		InfisicalClient: *infisicalClient,
+		MinioClient:     *minioClient,
 	})
 
 	e.Logger.Fatal(e.Start(":1323"))
