@@ -1,7 +1,7 @@
 services:
   echo-app:
     build:
-      context: .
+      context: ./go-service/
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
@@ -32,15 +32,35 @@ services:
       retries: 5
       start_period: 10s
     volumes:
-      - database-data:/var/lib/postgresql
+      - database-data:/var/lib/postgresql/data
     networks:
       - backend
     restart: unless-stopped
 
+  next-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - echo-app
+    environment:
+      - NODE_ENV=development
+      - AUTH_DISCORD_ID=test-discord-client-id
+      - AUTH_DISCORD_SECRET=test-discord-client-secret
+      - DATABASE_URL=postgresql://postgres:test@database:5432/prism
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+    restart: always
+    networks:
+      - backend
 
 volumes:
   database-data:
 
 networks:
   backend:
-    driver: bridge
