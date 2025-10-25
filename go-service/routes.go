@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"net/http"
 
+	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
 	"github.com/benkamin03/prism/internal/orchestrator"
-	infisical "github.com/infisical/go-sdk"
 	"github.com/labstack/echo/v4"
 )
 
@@ -38,6 +38,7 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	orchestrator.SetupRoutes(&orchestrator.OrchestratorRoutesConfig{
 		Echo:        e,
 		MinioClient: routesConfig.MinioClient,
+	})
 
 	infisical.SetupRoutes(&infisical.InfisicalRoutesConfig{
 		InfisicalClient: routesConfig.InfisicalClient,
