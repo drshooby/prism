@@ -18,4 +18,4 @@ COPY . .
 EXPOSE 3000
 
 # Command to run the Next.js development server
-CMD ["npm", "run", "dev"]
+CMD ["npx", "next", "dev", "--turbo"]

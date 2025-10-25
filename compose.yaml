@@ -50,6 +50,8 @@ services:
       - AUTH_DISCORD_ID=test-discord-client-id
       - AUTH_DISCORD_SECRET=test-discord-client-secret
       - DATABASE_URL=postgresql://postgres:test@database:5432/prism
+    env_file:
+      - .env
     volumes:
       - ./src:/app/src
       - ./public:/app/public
