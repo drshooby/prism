@@ -141,12 +141,11 @@ export const githubRouter = createTRPCRouter({
   getUserRepos: githubProcedure.query(async ({ ctx: { accessToken } }) => {
     const octokit = new Octokit({ auth: accessToken })
 
-    const repos = await octokit.paginate("GET /user/repos", {
+    const repos = await octokit.rest.repos.listForAuthenticatedUser({
       per_page: 100,
-      sort: "updated",
-      visibility: "all"
+      sort: "updated"
     })
 
-    return repos
+    return repos.data
   })
 })
