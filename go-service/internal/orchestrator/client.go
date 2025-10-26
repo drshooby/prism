@@ -117,7 +117,7 @@ func (o *Orchestrator) GetOrCreateBranch(branchName string) error {
 	}
 
 	// Push the branch to remote
-	cmd = exec.Command("git", "push", "-u", "origin", branchName)
+	cmd = exec.Command("git", "push", "--force", "-u", "origin", branchName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push branch %s to remote: %s, %w", branchName, string(output), err)
 	}
@@ -366,7 +366,7 @@ func (o *Orchestrator) ProcessChatWorkflow(branchName string, modifiedFiles []Mo
 	commitHash := strings.TrimSpace(string(commitHashBytes))
 
 	// Step 4: Push changes
-	cmd = exec.Command("git", "push", "-u", "origin", branchName)
+	cmd = exec.Command("git", "push", "--force", "-u", "origin", branchName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("failed to push: %s, %w", string(output), err)
 	}
