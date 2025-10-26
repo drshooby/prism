@@ -4,17 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/benkamin03/prism/internal/infisical"
+	"github.com/benkamin03/prism/internal/orchestrator"
 	"github.com/labstack/echo/v4"
 )
 
 type LLMRoutesConfig struct {
-	Echo *echo.Echo
+	Echo            *echo.Echo
+	InfisicalClient infisical.InfisicalClient
 }
 
 func SetupRoutes(routesConfig *LLMRoutesConfig) {
@@ -49,6 +53,7 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 
 		repoURL := c.FormValue("repo_url")
 		githubToken := c.FormValue("github_token")
+		projectID := c.FormValue("project_id")
 
 		if repoURL == "" || githubToken == "" {
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": "repo_url, and github_token are required"})
@@ -59,51 +64,20 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": "at least one file is required"})
 		}
 
-		// Create temp directory
-		tmpDir, err := os.MkdirTemp("/var/tmp/", "cloned-repo-")
+		orchestrator := orchestrator.NewOrchestrator(&orchestrator.NewOrchestratorInput{
+			RepoURL:     repoURL,
+			GitHubToken: githubToken,
+			ProjectID:   projectID,
+		})
+		log.Printf("Orchestrator initialized: %v", orchestrator)
+
+		tmpDir, err := orchestrator.CloneAndNavigateToRepo()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to create temp dir: %v", err)})
-		}
-		defer os.RemoveAll(tmpDir)
-
-		// Clone with token in URL for authentication
-		cloneURL := strings.Replace(repoURL, "https://", fmt.Sprintf("https://%s@", githubToken), 1)
-		cmd := exec.Command("git", "clone", cloneURL, tmpDir)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, echo.Map{
-				"error": fmt.Sprintf("failed to clone repo: %s, err: %v", string(output), err),
-			})
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to clone and navigate to repo: %v", err)})
 		}
 
-		// Change to cloned repo directory
-		if err := os.Chdir(tmpDir); err != nil {
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to change to repo dir: %v", err)})
-		}
-
-		// Update remote URL to include token for push
-		cmd = exec.Command("git", "remote", "set-url", "origin", cloneURL)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to set remote url: %s", string(output))})
-		}
-
-		// Check if branch exists remotely
-		cmd = exec.Command("git", "ls-remote", "--heads", "origin", conversationID)
-		output, _ = cmd.CombinedOutput()
-		branchExists := len(output) > 0
-
-		if branchExists {
-			// Branch exists, checkout
-			cmd = exec.Command("git", "checkout", conversationID)
-			if output, err := cmd.CombinedOutput(); err != nil {
-				return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to checkout branch: %s", string(output))})
-			}
-		} else {
-			// Branch doesn't exist, create new branch
-			cmd = exec.Command("git", "checkout", "-b", conversationID)
-			if output, err := cmd.CombinedOutput(); err != nil {
-				return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to create branch: %s", string(output))})
-			}
+		if err := orchestrator.GetOrCreateBranch(conversationID); err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to get or create branch: %v", err)})
 		}
 
 		// Replace/add files from upload
@@ -132,14 +106,8 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			}
 		}
 
-		// Configure git user
-		cmd = exec.Command("git", "config", "user.email", "prism-bot@example.com")
-		cmd.CombinedOutput()
-		cmd = exec.Command("git", "config", "user.name", "Prism Bot")
-		cmd.CombinedOutput()
-
 		// Add all changes
-		cmd = exec.Command("git", "add", ".")
+		cmd := exec.Command("git", "add", ".")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to add files: %s", string(output))})
 		}
@@ -166,6 +134,25 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 		cmd = exec.Command("git", "push", "origin", conversationID)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to push: %s", string(output))})
+		}
+
+		// Inject the variables into the environment for terraform
+		secretsResponse := routesConfig.InfisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
+			Environment: "dev",
+			ProjectID:   projectID,
+			SecretPath:  "/",
+		})
+		if secretsResponse.StatusCode != http.StatusOK || secretsResponse.Error != "" {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to fetch secrets: %s", secretsResponse.Error)})
+		}
+		log.Printf("Fetched secrets from Infisical: %v", secretsResponse.Secrets)
+
+		// Inject the secret key/value pairs into the environment
+		for key, value := range secretsResponse.Secrets {
+			log.Printf("Injecting secret into environment: %s", key)
+			if err := os.Setenv(key, value); err != nil {
+				return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to set env var %s: %v", key, err)})
+			}
 		}
 
 		// Run terraform init
