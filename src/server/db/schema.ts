@@ -160,3 +160,45 @@ export const terraformPlans = createTable(
     )
   ]
 )
+
+export const conversations = createTable(
+  "conversation",
+  (d) => ({
+    id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+    projectId: d
+      .integer()
+      .notNull()
+      .references(() => importedRepositories.id),
+    userId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull()
+  }),
+  (t) => [index("conversation_user_id_idx").on(t.userId)]
+)
+
+export const messages = createTable(
+  "message",
+  (d) => ({
+    id: d.text().unique().primaryKey(),
+    userId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id),
+    conversationId: d
+      .integer()
+      .notNull()
+      .references(() => conversations.id),
+    content: d.jsonb().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    commitHash: d.text().notNull()
+  }),
+  (t) => [index("message_user_id_idx").on(t.userId)]
+)
