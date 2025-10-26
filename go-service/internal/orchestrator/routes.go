@@ -42,13 +42,13 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 		log.Printf("infisicalClient (from routes): %+v", routesConfig.InfisicalClient)
 
 		orchestrator := NewOrchestrator(&NewOrchestratorInput{
-			repoURL:         planRequest.RepoURL,
-			gitHubToken:     planRequest.GitHubToken,
-			userID:          planRequest.UserID,
-			minioClient:     routesConfig.MinioClient,
-			infisicalClient: routesConfig.InfisicalClient,
-			projectID:       planRequest.ProjectID,
-			context:         c.Request().Context(),
+			RepoURL:         planRequest.RepoURL,
+			GitHubToken:     planRequest.GitHubToken,
+			UserID:          planRequest.UserID,
+			MinioClient:     routesConfig.MinioClient,
+			InfisicalClient: routesConfig.InfisicalClient,
+			ProjectID:       planRequest.ProjectID,
+			Context:         c.Request().Context(),
 		})
 
 		response, err := orchestrator.Plan()
@@ -65,11 +65,11 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 		githubToken := c.Request().Header.Get("Authorization")
 
 		orchestrator := NewOrchestrator(&NewOrchestratorInput{
-			minioClient:     routesConfig.MinioClient,
-			infisicalClient: routesConfig.InfisicalClient,
-			context:         c.Request().Context(),
-			gitHubToken:     githubToken,
-			repoURL:         repoURL,
+			MinioClient:     routesConfig.MinioClient,
+			InfisicalClient: routesConfig.InfisicalClient,
+			Context:         c.Request().Context(),
+			GitHubToken:     githubToken,
+			RepoURL:         repoURL,
 		})
 
 		response, err := orchestrator.GetConversation(conversationID)

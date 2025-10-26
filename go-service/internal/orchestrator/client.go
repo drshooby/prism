@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
@@ -26,28 +27,28 @@ type Orchestrator struct {
 }
 
 type NewOrchestratorInput struct {
-	repoURL         string
-	gitHubToken     string
-	userID          string
-	projectID       string
-	minioClient     minio.MinioClient
-	infisicalClient infisical.InfisicalClient
-	context         context.Context
+	RepoURL         string
+	GitHubToken     string
+	UserID          string
+	ProjectID       string
+	MinioClient     minio.MinioClient
+	InfisicalClient infisical.InfisicalClient
+	Context         context.Context
 }
 
 func NewOrchestrator(config *NewOrchestratorInput) *Orchestrator {
 	return &Orchestrator{
-		repoURL:         config.repoURL,
-		gitHubToken:     config.gitHubToken,
-		userID:          config.userID,
-		projectID:       config.projectID,
-		minioClient:     config.minioClient,
-		infisicalClient: config.infisicalClient,
-		context:         config.context,
+		repoURL:         config.RepoURL,
+		gitHubToken:     config.GitHubToken,
+		userID:          config.UserID,
+		projectID:       config.ProjectID,
+		minioClient:     config.MinioClient,
+		infisicalClient: config.InfisicalClient,
+		context:         config.Context,
 	}
 }
 
-func (o *Orchestrator) cloneAndNavigateToRepo() error {
+func (o *Orchestrator) CloneAndNavigateToRepo() error {
 	tmpDir, err := os.MkdirTemp("/var/tmp/", "cloned-repo-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
@@ -75,7 +76,7 @@ func (o *Orchestrator) cloneAndNavigateToRepo() error {
 	return nil
 }
 
-func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
+func (o *Orchestrator) DownloadOrCreateTFStateFile(bucketName string) error {
 	// Create the .terraform directory
 	if err := os.MkdirAll(".terraform", os.ModePerm); err != nil {
 		return fmt.Errorf("error creating .terraform directory: %w", err)
@@ -93,10 +94,10 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	return nil
 }
 
-func (o *Orchestrator) getOrCreateBranch(branchName string) error {
+func (o *Orchestrator) GetOrCreateBranch(branchName string) error {
 	// Clone and navigate to the repository
-	if err := o.cloneAndNavigateToRepo(); err != nil {
-		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+	if err := o.CloneAndNavigateToRepo(); err != nil {
+		return fmt.Errorf("error in CloneAndNavigateToRepo: %w", err)
 	}
 
 	// Check if branch exists locally
@@ -195,8 +196,8 @@ func handleGetTerraformFiles(c echo.Context) error {
 
 func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, error) {
 	// Get or create the branch for the conversation
-	if err := o.getOrCreateBranch(conversationID); err != nil {
-		return nil, fmt.Errorf("error in getOrCreateBranch: %w", err)
+	if err := o.GetOrCreateBranch(conversationID); err != nil {
+		return nil, fmt.Errorf("error in GetOrCreateBranch: %w", err)
 	}
 	log.Printf("Successfully got or created branch for conversation ID: %s", conversationID)
 
@@ -215,8 +216,8 @@ func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, e
 
 func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	// Clone and navigate to the repository
-	if err := o.cloneAndNavigateToRepo(); err != nil {
-		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+	if err := o.CloneAndNavigateToRepo(); err != nil {
+		return nil, fmt.Errorf("error in CloneAndNavigateToRepo: %w", err)
 	}
 	log.Printf("Successfully cloned and navigated to repo")
 
@@ -227,8 +228,8 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	}
 
 	// Download or create the terraform.tfstate file
-	if err := o.downloadOrCreateTFStateFile(bucket.Name); err != nil {
-		return nil, fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
+	if err := o.DownloadOrCreateTFStateFile(bucket.Name); err != nil {
+		return nil, fmt.Errorf("error in DownloadOrCreateTFStateFile: %w", err)
 	}
 
 	// Fetch and inject the secrets into the environment
@@ -303,4 +304,149 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	log.Printf("Removed temporary directory: %s", tmpDir)
 
 	return response, nil
+}
+
+type ModifiedFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type ChatWorkflowResult struct {
+	Plan          map[string]interface{} `json:"plan"`
+	ModifiedFiles []ModifiedFile         `json:"modified_files"`
+	Branch        string                 `json:"branch"`
+	CommitHash    string                 `json:"commit_hash"`
+}
+
+func (o *Orchestrator) ProcessChatWorkflow(branchName string, modifiedFiles []ModifiedFile, commitMessage string) (*ChatWorkflowResult, error) {
+	// Step 1: Clone and checkout/create branch
+	if err := o.GetOrCreateBranch(branchName); err != nil {
+		return nil, fmt.Errorf("error in GetOrCreateBranch: %w", err)
+	}
+	log.Printf("Successfully checked out branch: %s", branchName)
+
+	// Step 2: Write modified files
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	for _, file := range modifiedFiles {
+		filePath := filepath.Join(workDir, file.Path)
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory for %s: %w", file.Path, err)
+		}
+		if err := os.WriteFile(filePath, []byte(file.Content), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write file %s: %w", file.Path, err)
+		}
+		log.Printf("Wrote file: %s", file.Path)
+	}
+
+	// Step 3: Commit changes
+	cmd := exec.Command("git", "add", ".")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("failed to add files: %s, %w", string(output), err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", commitMessage)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if !strings.Contains(string(output), "nothing to commit") {
+			return nil, fmt.Errorf("failed to commit: %s, %w", string(output), err)
+		}
+		log.Printf("No changes to commit")
+	}
+
+	// Get commit hash
+	cmd = exec.Command("git", "rev-parse", "HEAD")
+	commitHashBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit hash: %s, %w", string(commitHashBytes), err)
+	}
+	commitHash := strings.TrimSpace(string(commitHashBytes))
+
+	// Step 4: Push changes
+	cmd = exec.Command("git", "push", "-u", "origin", branchName)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("failed to push: %s, %w", string(output), err)
+	}
+	log.Printf("Pushed changes to branch: %s", branchName)
+
+	// Step 5: Inject secrets and run terraform plan
+	bucket, err := o.minioClient.GetOrCreateBucket(o.context, o.userID)
+	if err != nil {
+		return nil, fmt.Errorf("error in GetOrCreateBucket: %w", err)
+	}
+
+	if err := o.DownloadOrCreateTFStateFile(bucket.Name); err != nil {
+		return nil, fmt.Errorf("error in DownloadOrCreateTFStateFile: %w", err)
+	}
+
+	// Fetch and inject the secrets into the environment
+	secretsResponse := o.infisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
+		Environment: "dev",
+		ProjectID:   o.projectID,
+		SecretPath:  "/",
+	})
+	if secretsResponse.StatusCode != http.StatusOK || secretsResponse.Error != "" {
+		return nil, fmt.Errorf("failed to fetch secrets (status code %d): %s", secretsResponse.StatusCode, secretsResponse.Error)
+	}
+	log.Printf("Fetched secrets from Infisical")
+
+	// Inject the secret key/value pairs into the environment
+	for key, value := range secretsResponse.Secrets {
+		log.Printf("Injecting secret into environment: %s", key)
+		if err := os.Setenv(key, value); err != nil {
+			return nil, fmt.Errorf("failed to set secret env %s: %w", key, err)
+		}
+	}
+
+	// Run terraform init
+	log.Printf("Running terraform init")
+	cmd = exec.Command("terraform", "init", "-upgrade")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform init failed: %s, %w", string(output), err)
+	}
+
+	// Run terraform plan
+	log.Printf("Running terraform plan")
+	cmd = exec.Command("terraform", "plan", "-no-color", "-input=false", "-out=tfplan")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform plan failed: %s, %w", string(output), err)
+	}
+
+	// Upload state file
+	if err := o.minioClient.UploadFileObject(o.context, bucket.Name, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
+		return nil, fmt.Errorf("error uploading terraform.tfstate: %w", err)
+	}
+
+	// Convert the plan to JSON
+	log.Printf("Converting terraform plan to JSON")
+	cmd = exec.Command("sh", "-c", "terraform show -json tfplan > plan.json")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("terraform show -json failed: %s, %w", string(output), err)
+	}
+
+	// Read the JSON file
+	planFileContent, err := os.ReadFile("plan.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plan.json: %w", err)
+	}
+
+	var planJSON map[string]interface{}
+	if err := json.Unmarshal(planFileContent, &planJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal plan.json: %w", err)
+	}
+
+	// Clean up temp directory
+	tmpDir := workDir
+	defer os.RemoveAll(tmpDir)
+	log.Printf("Will clean up temporary directory: %s", tmpDir)
+
+	return &ChatWorkflowResult{
+		Plan:          planJSON,
+		ModifiedFiles: modifiedFiles,
+		Branch:        branchName,
+		CommitHash:    commitHash,
+	}, nil
 }

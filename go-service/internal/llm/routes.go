@@ -10,11 +10,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/benkamin03/prism/internal/infisical"
+	"github.com/benkamin03/prism/internal/minio"
 	"github.com/labstack/echo/v4"
 )
 
 type LLMRoutesConfig struct {
-	Echo *echo.Echo
+	Echo            *echo.Echo
+	MinioClient     minio.MinioClient
+	InfisicalClient infisical.InfisicalClient
+}
+
+type ChatRequest struct {
+	Message        string `json:"message"`
+	ConversationID string `json:"conversation_id"`
+	GitHubToken    string `json:"github_token"`
+	RepoURL        string `json:"repo_url"`
+	UserID         string `json:"user_id"`
+	ProjectID      string `json:"project_id"`
 }
 
 func SetupRoutes(routesConfig *LLMRoutesConfig) {
@@ -22,6 +35,44 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 
 	e.GET("/llm-plan", func(c echo.Context) error {
 		return c.String(200, "Hello LLM!")
+	})
+
+	e.POST("/chat", func(c echo.Context) error {
+		var chatReq ChatRequest
+		if err := c.Bind(&chatReq); err != nil {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request payload"})
+		}
+
+		if chatReq.Message == "" || chatReq.ConversationID == "" {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "message and conversation_id are required"})
+		}
+
+		if chatReq.RepoURL == "" || chatReq.GitHubToken == "" || chatReq.UserID == "" || chatReq.ProjectID == "" {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "repo_url, github_token, user_id, and project_id are required"})
+		}
+
+		// Process chat using the extracted function
+		result, err := ProcessChat(
+			&ChatProcessRequest{
+				Message:        chatReq.Message,
+				ConversationID: chatReq.ConversationID,
+				RepoURL:        chatReq.RepoURL,
+				GitHubToken:    chatReq.GitHubToken,
+				UserID:         chatReq.UserID,
+				ProjectID:      chatReq.ProjectID,
+			},
+			&ChatProcessConfig{
+				MinioClient:     routesConfig.MinioClient,
+				InfisicalClient: routesConfig.InfisicalClient,
+				Context:         c.Request().Context(),
+			},
+		)
+
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+		}
+
+		return c.JSON(http.StatusOK, result)
 	})
 
 	// POST /llm-plan
