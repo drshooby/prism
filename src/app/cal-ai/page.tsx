@@ -21,9 +21,9 @@ export default function Chat() {
 
     chatMutation.mutate({
       message: prompt,
-      conversationId: "test-conversation",
-      repoUrl: "https://github.com/your-org/your-repo",
-      projectId: "your-project-id",
+      conversationId: "test-branch", // replace with actual convo id
+      repoUrl: "git@github.com:ccrawford4/oneflow-infra.git", // replace with users actual repo url
+      projectId: "8b780994-3ac2-4694-a867-54da692fe6f9", // replace with your project id in the secrets manager
     })
   }
 
