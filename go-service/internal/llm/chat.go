@@ -66,17 +66,28 @@ func (c *LLMClient) GenerateFileModifications(userMessage string, currentFiles [
 
 	systemPrompt := `You are a Terraform infrastructure expert. Based on the user's request, you need to modify the Terraform files to implement their changes.
 
-Return your response as a JSON object with this structure:
+IMPORTANT: You must PRESERVE all existing code and only make the minimal changes necessary. Think of this like adding to or modifying existing code, not replacing it entirely.
+
+When modifying a file:
+- Keep all existing resources, variables, and outputs that are not being changed
+- Only add new resources or modify specific attributes that the user requested
+- Preserve comments, formatting, and organization of the existing code
+- If adding a new resource, append it to the existing file content
+- If modifying an existing resource, only change the specific attributes needed
+
+CRITICAL: Respond with ONLY a JSON object. No explanations, no markdown code blocks, no text before or after. Just raw JSON.
+
+Format:
 {
   "files": [
     {
       "path": "main.tf",
-      "content": "resource \"aws_instance\" \"example\" {\n  ami = \"ami-123456\"\n}"
+      "content": "resource \"aws_instance\" \"example\" {\n  ami = \"ami-123\"\n}"
     }
   ]
 }
 
-Only include files that need to be modified or created. Do not include unchanged files.`
+Only include files that need to be modified or created.`
 
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},

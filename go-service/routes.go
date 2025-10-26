@@ -48,6 +48,8 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	})
 
 	llm.SetupRoutes(&llm.LLMRoutesConfig{
-		Echo: e,
+		Echo:            e,
+		MinioClient:     routesConfig.MinioClient,
+		InfisicalClient: routesConfig.InfisicalClient,
 	})
 }
