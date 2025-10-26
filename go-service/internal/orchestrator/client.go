@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/benkamin03/prism/internal/infisical"
 	"github.com/benkamin03/prism/internal/minio"
+	"github.com/labstack/echo/v4"
 )
 
 type Orchestrator struct {
@@ -91,8 +93,124 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	return nil
 }
 
-func (o *Orchestrator) manageTerraform() error {
+func (o *Orchestrator) getOrCreateBranch(branchName string) error {
+	// Clone and navigate to the repository
+	if err := o.cloneAndNavigateToRepo(); err != nil {
+		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+	}
+
+	// Check if branch exists locally
+	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	if err := cmd.Run(); err != nil {
+		// Branch does not exist, create it
+		cmd = exec.Command("git", "checkout", "-b", branchName)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to create branch %s: %s, %w", branchName, string(output), err)
+		}
+	} else {
+		// Branch exists, checkout to it
+		cmd = exec.Command("git", "checkout", branchName)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to checkout to branch %s: %s, %w", branchName, string(output), err)
+		}
+	}
+
+	// Push the branch to remote
+	cmd = exec.Command("git", "push", "-u", "origin", branchName)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push branch %s to remote: %s, %w", branchName, string(output), err)
+	}
+
 	return nil
+}
+
+type FileContent struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type FilesResponse struct {
+	Files []FileContent `json:"files"`
+	Count int           `json:"count"`
+}
+
+func getTerraformFiles() ([]FileContent, error) {
+	var files []FileContent
+	rootPath, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	err = filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Check if file has .tf extension
+		if filepath.Ext(path) == ".tf" {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			// Get relative path from root
+			relPath, err := filepath.Rel(rootPath, path)
+			if err != nil {
+				relPath = path
+			}
+
+			files = append(files, FileContent{
+				Path:    relPath,
+				Content: string(content),
+			})
+		}
+
+		return nil
+	})
+
+	return files, err
+}
+
+func handleGetTerraformFiles(c echo.Context) error {
+	//
+	files, err := getTerraformFiles()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	response := FilesResponse{
+		Files: files,
+		Count: len(files),
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, error) {
+	// Get or create the branch for the conversation
+	if err := o.getOrCreateBranch(conversationID); err != nil {
+		return nil, fmt.Errorf("error in getOrCreateBranch: %w", err)
+	}
+	log.Printf("Successfully got or created branch for conversation ID: %s", conversationID)
+
+	// Fetch all the
+	files, err := getTerraformFiles()
+	response := FilesResponse{
+		Files: files,
+		Count: len(files),
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error in getTerraformFiles: %w", err)
+	}
+
+	return &response, nil
 }
 
 func (o *Orchestrator) Plan() (map[string]interface{}, error) {
