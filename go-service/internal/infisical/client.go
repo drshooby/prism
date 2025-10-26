@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/benkamin03/prism/internal/infisical/jsondefs"
 	infisical "github.com/infisical/go-sdk"
 )
+
+var PersistentConfig InfisicalClientConfig
 
 type InfisicalClientConfig struct {
 	SiteUrl               string
@@ -22,12 +25,6 @@ type InfisicalSecretOptions struct {
 
 type InfisicalClient struct {
 	client infisical.InfisicalClientInterface
-}
-
-type GetSecretResponse struct {
-	Secrets    []string `json:"secret"`
-	StatusCode int      `json:"statusCode"`
-	Error      string   `json:"error,omitempty"`
 }
 
 func NewInfisicalClient(config *InfisicalClientConfig) (*InfisicalClient, error) {
@@ -50,6 +47,10 @@ func NewInfisicalClient(config *InfisicalClientConfig) (*InfisicalClient, error)
 		panic(fmt.Sprintf("Authentication failed: %v", err))
 	}
 
+	PersistentConfig.SiteUrl = config.SiteUrl
+	PersistentConfig.InfisicalClientID = config.InfisicalClientID
+	PersistentConfig.InfisicalClientSecret = config.InfisicalClientSecret
+
 	return &InfisicalClient{
 		client: infisicalClientInterface,
 	}, nil
@@ -64,10 +65,10 @@ func NewListSecretOptions(base InfisicalSecretOptions) infisical.ListSecretsOpti
 	}
 }
 
-func (infisicalClient InfisicalClient) ListSecrets(options *InfisicalSecretOptions) *GetSecretResponse {
+func (infisicalClient InfisicalClient) ListSecrets(options *InfisicalSecretOptions) *jsondefs.GetSecretResponse {
 	secrets, err := infisicalClient.client.Secrets().List(NewListSecretOptions(*options))
 	if err != nil {
-		return &GetSecretResponse{
+		return &jsondefs.GetSecretResponse{
 			StatusCode: 500,
 			Error:      fmt.Sprintf("Error getting secrets: %v", err),
 		}
@@ -78,7 +79,7 @@ func (infisicalClient InfisicalClient) ListSecrets(options *InfisicalSecretOptio
 		secretValues[i] = s.SecretValue
 	}
 
-	return &GetSecretResponse{
+	return &jsondefs.GetSecretResponse{
 		Secrets:    secretValues,
 		StatusCode: 200,
 	}
