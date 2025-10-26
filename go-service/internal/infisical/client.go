@@ -74,13 +74,13 @@ func (infisicalClient InfisicalClient) ListSecrets(options *InfisicalSecretOptio
 		}
 	}
 
-	secretValues := make([]string, len(secrets))
-	for i, s := range secrets {
-		secretValues[i] = s.SecretValue
+	secretsMap := make(map[string]string, len(secrets))
+	for _, secret := range secrets {
+		secretsMap[secret.SecretKey] = secret.SecretValue
 	}
 
 	return &jsondefs.GetSecretResponse{
-		Secrets:    secretValues,
+		Secrets:    secretsMap,
 		StatusCode: 200,
 	}
 }
