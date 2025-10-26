@@ -128,20 +128,23 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	}
 
 	// Run terraform plan
-	cmd := exec.Command("terraform", "init")
+	log.Printf("Running terraform init")
+	cmd := exec.Command("terraform", "init", "-upgrade")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform init failed: %s, %w", string(output), err)
 	}
+	log.Printf("Terraform initialized successfully")
 
+	log.Printf("Running terraform plan")
 	cmd = exec.Command("terraform", "plan", "-no-color", "-input=false", "-out=tfplan")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform plan failed: %s, %w", string(output), err)
 	}
-
 	log.Printf("Terraform plan executed successfully")
 
 	// Convert the plan to json
-	cmd = exec.Command("terraform", "show", "-json", "tfplan", "|", "jq", "|", ">", "plan.json")
+	log.Printf("Converting terraform plan to JSON")
+	cmd = exec.Command("sh", "-c", "terraform show -json tfplan > plan.json")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform show -json failed: %s, %w", string(output), err)
 	} else {
