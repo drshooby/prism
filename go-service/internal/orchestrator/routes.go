@@ -58,5 +58,25 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 
 		return c.JSON(http.StatusOK, response)
 	})
-}
 
+	e.GET("/conversations/:conversationID", func(c echo.Context) error {
+		conversationID := c.Param("conversationID")
+		repoURL := c.QueryParam("repo_url")
+		githubToken := c.Request().Header.Get("Authorization")
+
+		orchestrator := NewOrchestrator(&NewOrchestratorInput{
+			minioClient:     routesConfig.MinioClient,
+			infisicalClient: routesConfig.InfisicalClient,
+			context:         c.Request().Context(),
+			gitHubToken:     githubToken,
+			repoURL:         repoURL,
+		})
+
+		response, err := orchestrator.GetConversation(conversationID)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, fmt.Sprintf("Error retrieving conversation: %v", err))
+		}
+
+		return c.JSON(http.StatusOK, response)
+	})
+}
