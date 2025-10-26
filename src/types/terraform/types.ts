@@ -1,11 +1,11 @@
-type Primitive = string | number | boolean;
+type Primitive = string | number | boolean
 
 export type Type =
   | Primitive
   | Array<Primitive>
   | Set<Primitive>
   | Map<string, Type>
-  | null;
+  | null
 
 export type TypeString =
   | "string"
@@ -14,4 +14,4 @@ export type TypeString =
   | "list"
   | "set"
   | "map"
-  | "null";
+  | "null"

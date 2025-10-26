@@ -1,4 +1,4 @@
-import type { Values } from "./values";
+import type { Values } from "./values"
 
 /**
  * State Representation — The complete top-level object returned by `terraform show -json <STATE FILE>`.
@@ -9,10 +9,10 @@ export interface State {
   /**
    * A Values Representation object derived from the values in the state. Because the state is always fully known, this is always complete.
    */
-  values: Values;
+  values: Values
 
   /**
    * Terraform CLI version that produced the state (string).
    */
-  terraform_version: string;
+  terraform_version: string
 }

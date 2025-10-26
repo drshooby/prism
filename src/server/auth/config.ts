@@ -1,15 +1,15 @@
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import GitHub from "next-auth/providers/github";
-import { env } from "@/env";
+import { DrizzleAdapter } from "@auth/drizzle-adapter"
+import { type DefaultSession, type NextAuthConfig } from "next-auth"
+import GitHub from "next-auth/providers/github"
+import { env } from "@/env"
 
-import { db } from "@/server/db";
+import { db } from "@/server/db"
 import {
   accounts,
   sessions,
   users,
-  verificationTokens,
-} from "@/server/db/schema";
+  verificationTokens
+} from "@/server/db/schema"
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -20,10 +20,10 @@ import {
 declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
-      id: string;
+      id: string
       // ...other properties
       // role: UserRole;
-    } & DefaultSession["user"];
+    } & DefaultSession["user"]
   }
 
   // interface User {
@@ -44,10 +44,10 @@ export const authConfig = {
       clientSecret: env.GITHUB_CLIENT_SECRET,
       authorization: {
         params: {
-          scope: "read:user user:email repo pull_requests read:org",
-        },
-      },
-    }),
+          scope: "read:user user:email repo pull_requests read:org"
+        }
+      }
+    })
     /**
      * ...add more providers here.
      *
@@ -62,15 +62,15 @@ export const authConfig = {
     usersTable: users,
     accountsTable: accounts,
     sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
+    verificationTokensTable: verificationTokens
   }),
   callbacks: {
     session: ({ session, user }) => ({
       ...session,
       user: {
         ...session.user,
-        id: user.id,
-      },
-    }),
-  },
-} satisfies NextAuthConfig;
+        id: user.id
+      }
+    })
+  }
+} satisfies NextAuthConfig

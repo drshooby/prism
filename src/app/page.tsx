@@ -1,20 +1,20 @@
 // Components
-import Link from "next/link";
+import Link from "next/link"
 
 // Functions
-import { auth } from "@/server/auth";
-import { api } from "@/trpc/server";
+import { auth } from "@/server/auth"
+import { api } from "@/trpc/server"
 
 // Styles
-import styles from "./Home.module.css";
+import styles from "./Home.module.css"
 
 export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
-  const data = await api.github.getUserRepos();
-  const session = await auth();
+  const hello = await api.post.hello({ text: "from tRPC" })
+  const data = await api.github.getUserRepos()
+  const session = await auth()
 
   if (session?.user) {
-    void api.post.getLatest.prefetch();
+    void api.post.getLatest.prefetch()
   }
 
   return (
@@ -72,5 +72,5 @@ export default async function Home() {
         </div>
       </div>
     </main>
-  );
+  )
 }

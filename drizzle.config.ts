@@ -1,12 +1,12 @@
-import { type Config } from "drizzle-kit";
+import { type Config } from "drizzle-kit"
 
-import { env } from "@/env";
+import { env } from "@/env"
 
 export default {
   schema: "./src/server/db/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
-    url: env.DATABASE_URL,
+    url: env.DATABASE_URL
   },
-  tablesFilter: ["prism-nextapp_*"],
-} satisfies Config;
+  tablesFilter: ["prism-nextapp_*"]
+} satisfies Config
