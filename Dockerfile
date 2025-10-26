@@ -17,5 +17,5 @@ COPY . .
 # Expose the port Next.js runs on (default 3000)
 EXPOSE 3000
 
-# Command to run the Next.js development server
-CMD ["npx", "next", "dev", "--turbo"]
+# Run database migration, then start the Next.js development server
+CMD sh -c "npx drizzle-kit push && npx next dev --turbo"
