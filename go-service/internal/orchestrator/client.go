@@ -87,33 +87,30 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 }
 
 func (o *Orchestrator) manageTerraform() error {
+	return nil
+}
+
+func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	// Clone and navigate to the repository
 	if err := o.cloneAndNavigateToRepo(); err != nil {
-		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
 	log.Printf("Successfully cloned and navigated to repo")
 
 	// Check if the bucket exists, if not create it
 	bucket, err := o.minioClient.GetOrCreateBucket(o.context, o.userID)
 	if err != nil {
-		return fmt.Errorf("error in GetOrCreateBucket: %w", err)
+		return nil, fmt.Errorf("error in GetOrCreateBucket: %w", err)
 	}
 
 	// Download or create the terraform.tfstate file
 	if err := o.downloadOrCreateTFStateFile(bucket.Name); err != nil {
-		return fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
+		return nil, fmt.Errorf("error in downloadOrCreateTFStateFile: %w", err)
 	}
-	return nil
-}
-
-func (o *Orchestrator) Plan() (map[string]interface{}, error) {
-	// if err := o.manageTerraform(); err != nil {
-	// 	return nil, fmt.Errorf("error in manageTerraform: %w", err)
-	// }
 
 	// Fetch and inject the secrets into the environment
 	secretsResponse := o.infisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
-		Environment: "Development",
+		Environment: "dev",
 		ProjectID:   o.projectID,
 		SecretPath:  "/",
 	})
@@ -165,4 +162,3 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	log.Printf("Terraform Plan JSON Content: %v", response)
 	return response, nil
 }
-
