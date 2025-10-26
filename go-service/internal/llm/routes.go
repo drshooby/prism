@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -199,4 +200,164 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			"branch":      conversationID,
 		})
 	})
+
+	e.POST("/conversations/:id/pr", func(c echo.Context) error {
+		conversationID := c.Param("id")
+
+		if conversationID == "" {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "conversation id is required"})
+		}
+
+		// Parse JSON request body
+		var req CreatePRRequestBody
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid JSON body"})
+		}
+
+		if req.RepoURL == "" || req.GithubToken == "" {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "repo_url and github_token are required"})
+		}
+
+		// Set defaults
+		baseBranch := req.BaseBranch
+		if baseBranch == "" {
+			baseBranch = "main"
+		}
+
+		prTitle := req.PRTitle
+		if prTitle == "" {
+			prTitle = fmt.Sprintf("Terraform updates for conversation %s", conversationID)
+		}
+
+		prBody := req.PRBody
+		if prBody == "" {
+			prBody = fmt.Sprintf("Automated terraform configuration updates for conversation %s", conversationID)
+		}
+
+		// Extract owner and repo from repoURL
+		// Example: https://github.com/drshooby/test-terraform-repo.git -> drshooby, test-terraform-repo
+		repoPath := strings.TrimPrefix(req.RepoURL, "https://github.com/")
+		repoPath = strings.TrimSuffix(repoPath, ".git")
+		parts := strings.Split(repoPath, "/")
+		if len(parts) != 2 {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid repo URL format"})
+		}
+		owner := parts[0]
+		repoName := parts[1]
+
+		// Check if branch exists remotely using GitHub API
+		exists, err := branchExistsOnGitHub(conversationID, owner, repoName, req.GithubToken)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to check branch: %v", err)})
+		}
+		if !exists {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": fmt.Sprintf("branch %s does not exist", conversationID)})
+		}
+
+		// Create pull request
+		pr, err := createPullRequest(req.GithubToken, owner, repoName, conversationID, baseBranch, prTitle, prBody)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to create PR: %v", err)})
+		}
+
+		return c.JSON(http.StatusOK, echo.Map{
+			"pr_number": pr.Number,
+			"pr_url":    pr.HTMLURL,
+			"branch":    conversationID,
+			"base":      baseBranch,
+		})
+	})
+}
+
+type CreatePRRequestBody struct {
+	RepoURL     string `json:"repo_url"`
+	GithubToken string `json:"github_token"`
+	BaseBranch  string `json:"base_branch,omitempty"` // defaults to "main"
+	PRTitle     string `json:"pr_title,omitempty"`
+	PRBody      string `json:"pr_body,omitempty"`
+}
+
+type CreatePRRequest struct {
+	Title string `json:"title"`
+	Head  string `json:"head"`
+	Base  string `json:"base"`
+	Body  string `json:"body"`
+}
+
+type CreatePRResponse struct {
+	Number  int    `json:"number"`
+	HTMLURL string `json:"html_url"`
+	Title   string `json:"title"`
+}
+
+// Helper functions
+func branchExistsOnGitHub(branchName, owner, repo, token string) (bool, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/branches/%s", owner, repo, branchName)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return false, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", token))
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return false, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(bodyBytes))
+}
+
+func createPullRequest(token, owner, repo, head, base, title, body string) (*CreatePRResponse, error) {
+	prRequest := CreatePRRequest{
+		Title: title,
+		Head:  head,
+		Base:  base,
+		Body:  body,
+	}
+
+	jsonData, err := json.Marshal(prRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal PR request: %w", err)
+	}
+
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls", owner, repo)
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", token))
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create PR (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var prResponse CreatePRResponse
+	if err := json.NewDecoder(resp.Body).Decode(&prResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &prResponse, nil
 }
