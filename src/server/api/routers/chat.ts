@@ -41,8 +41,15 @@ export const chatRouter = createTRPCRouter({
 			})
 
 			if (!response.ok) {
-				const error = await response.json()
-				throw new Error(error.error || "Failed to process chat")
+				let errorMessage = "Failed to process chat"
+				try {
+					const error = await response.json()
+					errorMessage = error.error || errorMessage
+				} catch {
+					const text = await response.text()
+					errorMessage = `Go service error (${response.status}): ${text}`
+				}
+				throw new Error(errorMessage)
 			}
 
 			return await response.json()

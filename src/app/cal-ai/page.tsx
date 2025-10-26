@@ -1,30 +1,44 @@
 "use client"
 
 import { useState } from "react"
-import { api } from "@/trpc/react"
 
 export default function Chat() {
   const [prompt, setPrompt] = useState("")
   const [response, setResponse] = useState<string>("")
-
-  const chatMutation = api.chat.send.useMutation({
-    onSuccess: (data) => {
-      setResponse(JSON.stringify(data, null, 2))
-    },
-    onError: (error) => {
-      setResponse(`Error: ${error.message}`)
-    },
-  })
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
+    setResponse("")
 
-    chatMutation.mutate({
-      message: prompt,
-      conversationId: "test-branch", // replace with actual convo id
-      repoUrl: "git@github.com:ccrawford4/oneflow-infra.git", // replace with users actual repo url
-      projectId: "8b780994-3ac2-4694-a867-54da692fe6f9", // replace with your project id in the secrets manager
-    })
+    try {
+      const res = await fetch("/api/cal-ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: prompt,
+          conversationId: "test-branch",
+          repoUrl: "git@github.com:ccrawford4/oneflow-infra.git",
+          projectId: "8b780994-3ac2-4694-a867-54da692fe6f9",
+        }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || `Error ${res.status}`)
+      }
+
+      const data = await res.json()
+      setResponse(JSON.stringify(data, null, 2))
+    } catch (error) {
+      console.error("Error:", error)
+      setResponse(`Error: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -37,8 +51,8 @@ export default function Chat() {
           placeholder="Enter your prompt..."
           style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
         />
-        <button type="submit" disabled={chatMutation.isPending}>
-          {chatMutation.isPending ? "Loading..." : "Submit"}
+        <button type="submit" disabled={loading}>
+          {loading ? "Loading..." : "Submit"}
         </button>
       </form>
       {response && (

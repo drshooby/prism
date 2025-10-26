@@ -29,8 +29,8 @@ FROM alpine:3.22.2
 
 WORKDIR /
 
-# Install Git and Terraform
-RUN apk add --no-cache git curl unzip && \
+# Install Git, OpenSSH, and Terraform
+RUN apk add --no-cache git openssh-client curl unzip && \
   TERRAFORM_VERSION=1.9.8 && \
   curl -fsSLo terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
   unzip terraform.zip -d /usr/local/bin && \

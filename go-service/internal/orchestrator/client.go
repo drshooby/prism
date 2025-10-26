@@ -60,18 +60,34 @@ func (o *Orchestrator) CloneAndNavigateToRepo() error {
 		return fmt.Errorf("failed to change dir: %w", err)
 	}
 
-	// Export GitHub token for authentication
-	log.Printf("Setting GH_TOKEN environment variable")
-	if err := os.Setenv("GH_TOKEN", o.gitHubToken); err != nil {
-		return fmt.Errorf("failed to set GH_TOKEN env: %w", err)
+	// Convert repo URL to HTTPS with token authentication
+	cloneURL := o.repoURL
+	// Handle SSH URLs like git@github.com:user/repo.git
+	if strings.HasPrefix(cloneURL, "git@github.com:") {
+		cloneURL = strings.Replace(cloneURL, "git@github.com:", "https://github.com/", 1)
+		cloneURL = strings.TrimSuffix(cloneURL, ".git")
 	}
+	// Inject token into HTTPS URL
+	cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s@", o.gitHubToken), 1)
 
 	// Clone the repository
 	log.Printf("Cloning repository into temp directory")
-	cmd := exec.Command("git", "clone", o.repoURL, ".")
+	cmd := exec.Command("git", "clone", cloneURL, ".")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to clone repo: %s, %w", string(output), err)
 	}
+
+	// Configure git remote to use token for push operations
+	cmd = exec.Command("git", "remote", "set-url", "origin", cloneURL)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set remote url: %s, %w", string(output), err)
+	}
+
+	// Configure git user for commits
+	cmd = exec.Command("git", "config", "user.email", "prism-bot@example.com")
+	cmd.CombinedOutput()
+	cmd = exec.Command("git", "config", "user.name", "Prism Bot")
+	cmd.CombinedOutput()
 
 	return nil
 }
