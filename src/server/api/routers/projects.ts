@@ -1,31 +1,31 @@
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
-import { z } from "zod";
-import { githubProcedure } from "./github";
-import { Octokit } from "octokit";
-import { TRPCError } from "@trpc/server";
-import { importedRepositories } from "@/server/db/schema";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc"
+import { z } from "zod"
+import { githubProcedure } from "./github"
+import { Octokit } from "octokit"
+import { TRPCError } from "@trpc/server"
+import { importedRepositories } from "@/server/db/schema"
 
 export const projectsRouter = createTRPCRouter({
   createProject: githubProcedure
     .input(
       z.object({
         repoName: z.string(),
-        owner: z.string(),
-      }),
+        owner: z.string()
+      })
     )
     .mutation(async ({ ctx, input }) => {
-      const octokit = new Octokit({ auth: ctx.accessToken });
+      const octokit = new Octokit({ auth: ctx.accessToken })
 
       const repo = await octokit.rest.repos.get({
         owner: input.owner,
-        repo: input.repoName,
-      });
+        repo: input.repoName
+      })
 
       if (!repo.data) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "Repository not found",
-        });
+          message: "Repository not found"
+        })
       }
 
       const [project] = await ctx.db
@@ -34,9 +34,9 @@ export const projectsRouter = createTRPCRouter({
           owner: input.owner,
           name: input.repoName,
           repoId: repo.data.id,
-          userId: ctx.session.user.id,
+          userId: ctx.session.user.id
         })
-        .returning({ id: importedRepositories.id });
+        .returning({ id: importedRepositories.id })
 
       /**
        *  TODO - get tf plan json
@@ -59,6 +59,6 @@ export const projectsRouter = createTRPCRouter({
        * }
        * */
 
-      return project;
-    }),
-});
+      return project
+    })
+})

@@ -105,3 +105,12 @@ func (minioClient *MinioClient) DownloadFileObject(ctx context.Context, bucketNa
 	}
 	return nil
 }
+
+func (minioClient *MinioClient) UploadFileObject(ctx context.Context, bucketName, objectName, filePath string) error {
+	info, err := minioClient.client.FPutObject(ctx, bucketName, objectName, filePath, minio.PutObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("error uploading file %s to object %s in bucket %s: %v", filePath, objectName, bucketName, err)
+	}
+	log.Printf("Successfully uploaded %s of size %d\n", info.Key, info.Size)
+	return nil
+}

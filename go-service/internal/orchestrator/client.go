@@ -74,9 +74,14 @@ func (o *Orchestrator) cloneAndNavigateToRepo() error {
 }
 
 func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
-	if err := o.minioClient.DownloadFileObject(o.context, bucketName, "terraform.tfstate", "terraform.tfstate"); err != nil {
+	// Create the .terraform directory
+	if err := os.MkdirAll(".terraform", os.ModePerm); err != nil {
+		return fmt.Errorf("error creating .terraform directory: %w", err)
+	}
+
+	if err := o.minioClient.DownloadFileObject(o.context, bucketName, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
 		// Create the file if it does not exist
-		if err := os.NewFile(0, "terraform.tfstate").Close(); err != nil {
+		if err := os.NewFile(0, ".terraform/terraform.tfstate").Close(); err != nil {
 			return fmt.Errorf("error creating empty terraform.tfstate: %w", err)
 		}
 		fmt.Println("terraform.tfstate not found in bucket, created empty file.")
@@ -128,20 +133,29 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	}
 
 	// Run terraform plan
-	cmd := exec.Command("terraform", "init")
+	log.Printf("Running terraform init")
+	cmd := exec.Command("terraform", "init", "-upgrade")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform init failed: %s, %w", string(output), err)
 	}
+	log.Printf("Terraform initialized successfully")
 
+	log.Printf("Running terraform plan")
 	cmd = exec.Command("terraform", "plan", "-no-color", "-input=false", "-out=tfplan")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform plan failed: %s, %w", string(output), err)
 	}
-
 	log.Printf("Terraform plan executed successfully")
 
+	// Ensure that we save this state file
+	if err := o.minioClient.UploadFileObject(o.context, bucket.Name, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
+		return nil, fmt.Errorf("error uploading terraform.tfstate: %w", err)
+	}
+	log.Printf("Uploaded updated terraform.tfstate to bucket %s", bucket.Name)
+
 	// Convert the plan to json
-	cmd = exec.Command("terraform", "show", "-json", "tfplan", "|", "jq", "|", ">", "plan.json")
+	log.Printf("Converting terraform plan to JSON")
+	cmd = exec.Command("sh", "-c", "terraform show -json tfplan > plan.json")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("terraform show -json failed: %s, %w", string(output), err)
 	} else {
@@ -158,7 +172,17 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	if err := json.Unmarshal(planFileContent, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal plan.json: %w", err)
 	}
-
 	log.Printf("Terraform Plan JSON Content: %v", response)
+
+	// Remove the temporary directory
+	tmpDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+	if err := os.RemoveAll(tmpDir); err != nil {
+		return nil, fmt.Errorf("failed to remove temp dir %s: %w", tmpDir, err)
+	}
+	log.Printf("Removed temporary directory: %s", tmpDir)
+
 	return response, nil
 }

@@ -1,11 +1,11 @@
-import { relations, sql } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm"
 import {
   index,
   pgTableCreator,
   primaryKey,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
-import { type AdapterAccount } from "next-auth/adapters";
+  uniqueIndex
+} from "drizzle-orm/pg-core"
+import { type AdapterAccount } from "next-auth/adapters"
 
 /**
  * This is an example of how to use the multi-project schema feature of Drizzle ORM. Use the same
@@ -13,7 +13,7 @@ import { type AdapterAccount } from "next-auth/adapters";
  *
  * @see https://orm.drizzle.team/docs/goodies#multi-project-schema
  */
-export const createTable = pgTableCreator((name) => `prism-nextapp_${name}`);
+export const createTable = pgTableCreator((name) => `prism-nextapp_${name}`)
 
 export const posts = createTable(
   "post",
@@ -28,13 +28,13 @@ export const posts = createTable(
       .timestamp({ withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
-    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
+    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date())
   }),
   (t) => [
     index("created_by_idx").on(t.createdById),
-    index("name_idx").on(t.name),
-  ],
-);
+    index("name_idx").on(t.name)
+  ]
+)
 
 export const users = createTable("user", (d) => ({
   id: d
@@ -47,15 +47,15 @@ export const users = createTable("user", (d) => ({
   emailVerified: d
     .timestamp({
       mode: "date",
-      withTimezone: true,
+      withTimezone: true
     })
     .default(sql`CURRENT_TIMESTAMP`),
-  image: d.varchar({ length: 255 }),
-}));
+  image: d.varchar({ length: 255 })
+}))
 
 export const usersRelations = relations(users, ({ many }) => ({
-  accounts: many(accounts),
-}));
+  accounts: many(accounts)
+}))
 
 export const accounts = createTable(
   "account",
@@ -74,17 +74,17 @@ export const accounts = createTable(
     scope: d.varchar({ length: 255 }),
     id_token: d.text(),
     session_state: d.varchar({ length: 255 }),
-    refresh_token_expires_in: d.integer(),
+    refresh_token_expires_in: d.integer()
   }),
   (t) => [
     primaryKey({ columns: [t.provider, t.providerAccountId] }),
-    index("account_user_id_idx").on(t.userId),
-  ],
-);
+    index("account_user_id_idx").on(t.userId)
+  ]
+)
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
-  user: one(users, { fields: [accounts.userId], references: [users.id] }),
-}));
+  user: one(users, { fields: [accounts.userId], references: [users.id] })
+}))
 
 export const sessions = createTable(
   "session",
@@ -94,24 +94,24 @@ export const sessions = createTable(
       .varchar({ length: 255 })
       .notNull()
       .references(() => users.id),
-    expires: d.timestamp({ mode: "date", withTimezone: true }).notNull(),
+    expires: d.timestamp({ mode: "date", withTimezone: true }).notNull()
   }),
-  (t) => [index("t_user_id_idx").on(t.userId)],
-);
+  (t) => [index("t_user_id_idx").on(t.userId)]
+)
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
-  user: one(users, { fields: [sessions.userId], references: [users.id] }),
-}));
+  user: one(users, { fields: [sessions.userId], references: [users.id] })
+}))
 
 export const verificationTokens = createTable(
   "verification_token",
   (d) => ({
     identifier: d.varchar({ length: 255 }).notNull(),
     token: d.varchar({ length: 255 }).notNull(),
-    expires: d.timestamp({ mode: "date", withTimezone: true }).notNull(),
+    expires: d.timestamp({ mode: "date", withTimezone: true }).notNull()
   }),
-  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
-);
+  (t) => [primaryKey({ columns: [t.identifier, t.token] })]
+)
 
 export const importedRepositories = createTable(
   "imported_repository",
@@ -127,14 +127,14 @@ export const importedRepositories = createTable(
     createdAt: d
       .timestamp({ withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
-      .notNull(),
+      .notNull()
   }),
   (t) => [
     index("imported_repo_user_idx").on(t.userId),
     uniqueIndex("imported_repo_repo_id_unique").on(t.repoId),
-    index("imported_repo_owner_name_idx").on(t.owner, t.name),
-  ],
-);
+    index("imported_repo_owner_name_idx").on(t.owner, t.name)
+  ]
+)
 
 export const terraformPlans = createTable(
   "terraform_plan",
@@ -150,13 +150,13 @@ export const terraformPlans = createTable(
     createdAt: d
       .timestamp({ withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
-      .notNull(),
+      .notNull()
   }),
   (t) => [
     index("terraform_plan_repository_id_idx").on(t.repositoryId),
     uniqueIndex("terraform_plan_repo_commit_unique").on(
       t.repositoryId,
-      t.commitHash,
-    ),
-  ],
-);
+      t.commitHash
+    )
+  ]
+)

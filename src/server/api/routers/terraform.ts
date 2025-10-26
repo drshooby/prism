@@ -1,8 +1,8 @@
-import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure } from "../trpc";
-import { z } from "zod";
-import { importedRepositories, terraformPlans } from "@/server/db/schema";
-import { eq } from "drizzle-orm";
+import { TRPCError } from "@trpc/server"
+import { createTRPCRouter, publicProcedure } from "../trpc"
+import { z } from "zod"
+import { importedRepositories, terraformPlans } from "@/server/db/schema"
+import { eq } from "drizzle-orm"
 
 export const terraformRouter = createTRPCRouter({
   storePlan: publicProcedure
@@ -11,20 +11,20 @@ export const terraformRouter = createTRPCRouter({
         repoId: z.number(),
         commitHash: z.string().min(1),
         name: z.string().optional(),
-        plan: z.unknown(),
-      }),
+        plan: z.unknown()
+      })
     )
     .mutation(async ({ ctx, input }) => {
-      const { repoId, commitHash, plan, name } = input;
+      const { repoId, commitHash, plan, name } = input
 
       const existingRepo = await ctx.db.query.importedRepositories.findFirst({
-        where: eq(importedRepositories.repoId, repoId),
-      });
+        where: eq(importedRepositories.repoId, repoId)
+      })
       if (!existingRepo) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Repository not imported",
-        });
+          message: "Repository not imported"
+        })
       }
 
       await ctx.db
@@ -32,9 +32,9 @@ export const terraformRouter = createTRPCRouter({
         .values({ repositoryId: existingRepo.id, commitHash, plan, name })
         .onConflictDoUpdate({
           target: [terraformPlans.repositoryId, terraformPlans.commitHash],
-          set: { plan, name },
-        });
+          set: { plan, name }
+        })
 
-      return { ok: true } as const;
-    }),
-});
+      return { ok: true } as const
+    })
+})
