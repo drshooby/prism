@@ -81,6 +81,7 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to get or create branch: %v", err)})
 		}
 
+		log.Printf("Files to process: %v", files)
 		// Replace/add files from upload
 		for _, fileHeader := range files {
 			src, err := fileHeader.Open()
@@ -90,6 +91,7 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			defer src.Close()
 
 			dstPath := filepath.Join(tmpDir, fileHeader.Filename)
+			log.Printf("Writing uploaded file to: %s", dstPath)
 
 			// Create directories if needed
 			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
@@ -102,16 +104,26 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			}
 			defer dst.Close()
 
+			log.Printf("Copying contents '%s' to '%s'", fileHeader.Filename, dstPath)
+
 			if _, err := io.Copy(dst, src); err != nil {
 				return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to write file %s: %v", fileHeader.Filename, err)})
 			}
 		}
 
+		cmd := exec.Command("git", "status")
+		statusOutput, err := cmd.CombinedOutput()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to get git status: %s", string(statusOutput))})
+		}
+		log.Printf("Git status after adding files:\n%s", string(statusOutput))
+
 		// Add all changes
-		cmd := exec.Command("git", "add", ".")
+		cmd = exec.Command("git", "add", ".")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to add files: %s", string(output))})
 		}
+		log.Printf("Staged changes for commit")
 
 		// Commit changes
 		commitMsg := fmt.Sprintf("Update terraform config for conversation %s", conversationID)
@@ -122,6 +134,7 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 				return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to commit: %s", string(output))})
 			}
 		}
+		log.Printf("Committed changes with message: %s", commitMsg)
 
 		// Get commit hash
 		cmd = exec.Command("git", "rev-parse", "HEAD")
@@ -130,12 +143,14 @@ func SetupRoutes(routesConfig *LLMRoutesConfig) {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to get commit hash: %s", string(commitHashBytes))})
 		}
 		commitHash := strings.TrimSpace(string(commitHashBytes))
+		log.Printf("Commit hash: %s", commitHash)
 
 		// Push to remote
-		cmd = exec.Command("git", "push", "origin", conversationID)
+		cmd = exec.Command("git", "push", "--force", "origin", conversationID)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("failed to push: %s", string(output))})
 		}
+		log.Printf("Pushed changes to remote branch %s", conversationID)
 
 		// Inject the variables into the environment for terraform
 		secretsResponse := routesConfig.InfisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{

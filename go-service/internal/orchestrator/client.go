@@ -104,7 +104,7 @@ func (o *Orchestrator) remoteBranchExists(branchName string) bool {
 
 func (o *Orchestrator) pushToRemote(branchName string) error {
 	// Push the branch to remote
-	cmd := exec.Command("git", "push", "-u", "origin", branchName)
+	cmd := exec.Command("git", "push", "--force", "-u", "origin", branchName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push branch %s to remote: %s, %w", branchName, string(output), err)
 	}
@@ -112,11 +112,6 @@ func (o *Orchestrator) pushToRemote(branchName string) error {
 }
 
 func (o *Orchestrator) GetOrCreateBranch(branchName string) error {
-	// Clone and navigate to the repository
-	if _, err := o.CloneAndNavigateToRepo(); err != nil {
-		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
-	}
-
 	// Check if branch exists
 	if !o.remoteBranchExists(branchName) {
 		// Branch does not exist, create it
@@ -223,35 +218,41 @@ func (o *Orchestrator) checkoutLocalBranch(branchName string) error {
 	return nil
 }
 
-func (o *Orchestrator) DeleteCommit(conversationID, commitHash string) error {
+func (o *Orchestrator) DeleteCommit(conversationID, commitHash string) (map[string]interface{}, error) {
 	// Clone and navigate to the repository
 	if _, err := o.CloneAndNavigateToRepo(); err != nil {
-		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
 	log.Printf("Successfully cloned and navigated to repo")
 
 	// Checkout to the conversation branch
 	if err := o.checkoutLocalBranch(conversationID); err != nil {
-		return fmt.Errorf("error in checkoutLocalBranch: %w", err)
+		return nil, fmt.Errorf("error in checkoutLocalBranch: %w", err)
 	}
 	log.Printf("Checked out to branch: %s", conversationID)
 
 	// Delete the commit by resetting to the previous commit
 	cmd := exec.Command("git", "reset", "--hard", commitHash+"^")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to reset commit %s: %s, %w", commitHash, string(output), err)
+		return nil, fmt.Errorf("failed to reset commit %s: %s, %w", commitHash, string(output), err)
 	}
 	log.Printf("Reset to previous commit before: %s", commitHash)
 
-	if err := o.pushToRemote(conversationID); err != nil {
-		return fmt.Errorf("error in pushToRemote: %w", err)
+	cmd = exec.Command("git", "push", "--force", "origin", conversationID)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("failed to force push after deleting commit %s: %s, %w", commitHash, string(output), err)
 	}
 	log.Printf("Force pushed changes to branch: %s", conversationID)
 
-	return nil
+	return o.generateJSONPlan()
 }
 
 func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, error) {
+	// Clone and navigate to the repository
+	if _, err := o.CloneAndNavigateToRepo(); err != nil {
+		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+	}
+
 	// Get or create the branch for the conversation
 	if err := o.GetOrCreateBranch(conversationID); err != nil {
 		return nil, fmt.Errorf("error in getOrCreateBranch: %w", err)
@@ -271,13 +272,7 @@ func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, e
 	return &response, nil
 }
 
-func (o *Orchestrator) Plan() (map[string]interface{}, error) {
-	// Clone and navigate to the repository
-	if _, err := o.CloneAndNavigateToRepo(); err != nil {
-		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
-	}
-	log.Printf("Successfully cloned and navigated to repo")
-
+func (o *Orchestrator) generateJSONPlan() (map[string]interface{}, error) {
 	// Check if the bucket exists, if not create it
 	bucket, err := o.MinioClient.GetOrCreateBucket(o.context, o.UserID)
 	if err != nil {
@@ -350,13 +345,21 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	}
 	log.Printf("Terraform Plan JSON Content: %v", response)
 
-	// Remove the temporary directory
-	tmpDir, err := os.Getwd()
+	return response, nil
+}
+
+func (o *Orchestrator) Plan() (map[string]interface{}, error) {
+	// Clone and navigate to the repository
+	tmpDir, err := o.CloneAndNavigateToRepo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current working directory: %w", err)
+		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
-	if err := os.RemoveAll(tmpDir); err != nil {
-		return nil, fmt.Errorf("failed to remove temp dir %s: %w", tmpDir, err)
+	defer os.RemoveAll(tmpDir) // Clean up temp dir after execution
+	log.Printf("Successfully cloned and navigated to repo")
+
+	response, err := o.generateJSONPlan()
+	if err != nil {
+		return nil, fmt.Errorf("error in generateJSONPlan: %w", err)
 	}
 	log.Printf("Removed temporary directory: %s", tmpDir)
 

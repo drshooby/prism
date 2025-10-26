@@ -94,10 +94,11 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 			RepoURL:         repoURL,
 		})
 
-		if err := orchestrator.DeleteCommit(conversationID, commitHash); err != nil {
+		response, err := orchestrator.DeleteCommit(conversationID, commitHash)
+		if err != nil {
 			return c.String(http.StatusInternalServerError, fmt.Sprintf("Error deleting message: %v", err))
 		}
 
-		return c.NoContent(http.StatusNoContent)
+		return c.JSON(http.StatusOK, response)
 	})
 }
