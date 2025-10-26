@@ -1,8 +1,4 @@
-import { DrizzleAdapter } from "@auth/drizzle-adapter"
-import { type DefaultSession, type NextAuthConfig } from "next-auth"
-import GitHub from "next-auth/providers/github"
-import { env } from "@/env"
-
+import { auth } from "."
 import { db } from "@/server/db"
 import {
   accounts,
@@ -10,6 +6,15 @@ import {
   users,
   verificationTokens
 } from "@/server/db/schema"
+import {
+  type DefaultSession,
+  type NextAuthConfig,
+  type Session
+} from "next-auth"
+import { env } from "@/env"
+import GitHub from "next-auth/providers/github"
+import { DrizzleAdapter } from "@auth/drizzle-adapter"
+import { redirect, unauthorized } from "next/navigation"
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -74,3 +79,34 @@ export const authConfig = {
     })
   }
 } satisfies NextAuthConfig
+
+/**
+ * Via a NextAuth `Session`, confirm a user is authorized.
+ * That is, they have a valid `id` and `email`.
+ * We can extend this function to expand what "authorized" means as needed.
+ *
+ * @param session a NextAuth `Session` object, likely returned from `signIn()`
+ * @returns `true` if authorized, `false` otherwise
+ */
+export function isAuthorized(session: Session | null) {
+  const userId = session?.user?.id
+  const userEmail = session?.user?.email
+  if (!userId || !userEmail) return false
+  return true
+}
+
+/**
+ * Attempts to authenticate the current NextAuth `Session`.
+ * If not authenticated, redirect to the homepage to prompt for signin.
+ * If not authorized, return Next.js' `unauthorized()`.
+ * If successful, return the NextAuth `User` object.
+ *
+ * @returns a NextAuth `User` object if authenticated & authorized; redirect appropriately otherwise
+ */
+export async function protectRouteAndGetSessionUser() {
+  const session = await auth()
+  if (!session) redirect("/")
+  const authorized = isAuthorized(session)
+  if (!authorized) unauthorized()
+  return session.user
+}
