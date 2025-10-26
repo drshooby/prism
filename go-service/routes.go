@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/benkamin03/prism/internal/infisical"
+	"github.com/benkamin03/prism/internal/llm"
 	"github.com/benkamin03/prism/internal/minio"
 	"github.com/benkamin03/prism/internal/orchestrator"
 	"github.com/labstack/echo/v4"
@@ -44,5 +45,9 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	infisical.SetupRoutes(&infisical.InfisicalRoutesConfig{
 		InfisicalClient: routesConfig.InfisicalClient,
 		Echo:            e,
+	})
+
+	llm.SetupRoutes(&llm.LLMRoutesConfig{
+		Echo: e,
 	})
 }

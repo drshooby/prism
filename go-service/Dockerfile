@@ -24,10 +24,18 @@ RUN CGO_ENABLED=0 go build \
   -ldflags="-s -w" \
   -o echo-app
 
-# Production stage using minimal scratch image
+# Production stage using minimal Alpine image
 FROM alpine:3.22.2
 
 WORKDIR /
+
+# Install Git and Terraform
+RUN apk add --no-cache git curl unzip && \
+  TERRAFORM_VERSION=1.9.8 && \
+  curl -fsSLo terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
+  unzip terraform.zip -d /usr/local/bin && \
+  rm terraform.zip && \
+  terraform version
 
 COPY --from=build /app/echo-app echo-app
 
