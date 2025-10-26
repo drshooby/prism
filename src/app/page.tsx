@@ -18,54 +18,42 @@ export default async function Home() {
   }
 
   return (
-    <main className={styles.main}>
-      <div className={styles.container}>
+    <main>
+      <div>
         <div>
           {data?.map((repo) => (
             <div key={repo.id}>{repo.name}</div>
           ))}
         </div>
 
-        <h1 className={styles.title}>
-          Create <span className={styles.pinkSpan}>T3</span> App
+        <h1>
+          Create <span>T3</span> App
         </h1>
-        <div className={styles.cardRow}>
+        <div>
           <Link
-            className={styles.card}
             href="https://create.t3.gg/en/usage/first-steps"
             target="_blank"
           >
-            <h3 className={styles.cardTitle}>HELLOOOOO</h3>
-            <div className={styles.cardText}>
+            <h3>HELLOOOOO</h3>
+            <p>
               Just the basics - Everything you need to know to set up your
               database and authentication.
-            </div>
+            </p>
           </Link>
-          <Link
-            className={styles.card}
-            href="https://create.t3.gg/en/introduction"
-            target="_blank"
-          >
-            <h3 className={styles.cardTitle}>Documentation →</h3>
-            <div className={styles.cardText}>
+          <Link href="https://create.t3.gg/en/introduction" target="_blank">
+            <h3>Documentation →</h3>
+            <p>
               Learn more about Create T3 App, the libraries it uses, and how to
               deploy it.
-            </div>
+            </p>
           </Link>
         </div>
-        <div className={styles.showcaseContainer}>
-          <p className={styles.showcaseText}>
-            {hello ? hello.greeting : "Loading tRPC query..."}
-          </p>
+        <div>
+          <p>{hello ? hello.greeting : "Loading tRPC query..."}</p>
 
-          <div className={styles.authContainer}>
-            <p className={styles.showcaseText}>
-              {session && <span>Logged in as {session.user?.name}</span>}
-            </p>
-            <Link
-              href={session ? "/api/auth/signout" : "/api/auth/signin"}
-              className={styles.loginButton}
-            >
+          <div>
+            <p>{session && <span>Logged in as {session.user?.name}</span>}</p>
+            <Link href={session ? "/api/auth/signout" : "/api/auth/signin"}>
               {session ? "Sign out" : "Sign in"}
             </Link>
           </div>
