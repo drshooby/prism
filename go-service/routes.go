@@ -36,8 +36,9 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	})
 
 	orchestrator.SetupRoutes(&orchestrator.OrchestratorRoutesConfig{
-		Echo:        e,
-		MinioClient: routesConfig.MinioClient,
+		Echo:            e,
+		MinioClient:     routesConfig.MinioClient,
+		InfisicalClient: routesConfig.InfisicalClient,
 	})
 
 	infisical.SetupRoutes(&infisical.InfisicalRoutesConfig{

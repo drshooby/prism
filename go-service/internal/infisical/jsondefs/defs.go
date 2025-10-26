@@ -7,9 +7,9 @@ type ListSecretsRequest struct {
 }
 
 type GetSecretResponse struct {
-	Secrets    []string `json:"secret"`
-	StatusCode int      `json:"statusCode"`
-	Error      string   `json:"error,omitempty"`
+	Secrets    map[string]string `json:"secret"`
+	StatusCode int               `json:"statusCode"`
+	Error      string            `json:"error,omitempty"`
 }
 
 type CreateProjectRequest struct {
