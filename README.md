@@ -7,6 +7,7 @@ This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3
 ### Environment Setup
 
 1. Copy the example environment file:
+
    ```bash
    cp .env.example .env
    ```
@@ -18,6 +19,7 @@ This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3
 Before running the full application, you need to set up Infisical for secrets management:
 
 1. Start the Infisical service:
+
    ```bash
    docker compose up infisical-secrets-manager infisical-db infisical-redis
    ```
@@ -40,6 +42,7 @@ docker compose up
 ```
 
 This will start:
+
 - PostgreSQL database (port 5432)
 - MinIO object storage (ports 9000, 9001)
 - Infisical secrets manager (port 8080)

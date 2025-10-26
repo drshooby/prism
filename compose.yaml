@@ -10,7 +10,7 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - backend
-  
+
   infisical-secrets-manager:
     image: infisical/infisical:latest-postgres
     container_name: infisical-backend
@@ -53,7 +53,11 @@ services:
       POSTGRES_PASSWORD: secondpass
       POSTGRES_DB: second_db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready --username=postgres && psql --username=postgres --list"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready --username=postgres && psql --username=postgres --list",
+        ]
       interval: 5s
       timeout: 10s
       retries: 10
@@ -100,7 +104,7 @@ services:
       retries: 5
       start_period: 10s
     ports:
-      - "5432:5432" 
+      - "5432:5432"
     volumes:
       - database-data:/var/lib/postgresql
     networks:
@@ -120,12 +124,33 @@ services:
       - AUTH_DISCORD_ID=test-discord-client-id
       - AUTH_DISCORD_SECRET=test-discord-client-secret
       - DATABASE_URL=postgresql://postgres:test@database:5432/prism
+      - TERRAFORM_MCP_URL=http://terraform-mcp:3000/mcp
+      - GO_SERVICE_URL=http://echo-app:1323
     env_file:
       - .env
     volumes:
       - ./src:/app/src
       - ./public:/app/public
     restart: always
+    networks:
+      - backend
+
+  terraform-mcp:
+    image: hashicorp/terraform-mcp-server:0.3
+    container_name: terraform-mcp
+    ports:
+      - "3001:3000"
+    environment: {}
+    command:
+      - "terraform-mcp-server"
+      - "streamable-http"
+      - "--transport-host"
+      - "0.0.0.0"
+      - "--transport-port"
+      - "3000"
+      - "--mcp-endpoint"
+      - "/mcp"
+    restart: unless-stopped
     networks:
       - backend
 
