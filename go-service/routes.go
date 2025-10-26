@@ -48,6 +48,7 @@ func SetupRoutes(routesConfig *RoutesConfig) {
 	})
 
 	llm.SetupRoutes(&llm.LLMRoutesConfig{
-		Echo: e,
+		InfisicalClient: routesConfig.InfisicalClient,
+		Echo:            e,
 	})
 }

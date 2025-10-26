@@ -42,12 +42,12 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 		log.Printf("infisicalClient (from routes): %+v", routesConfig.InfisicalClient)
 
 		orchestrator := NewOrchestrator(&NewOrchestratorInput{
-			repoURL:         planRequest.RepoURL,
-			gitHubToken:     planRequest.GitHubToken,
-			userID:          planRequest.UserID,
-			minioClient:     routesConfig.MinioClient,
-			infisicalClient: routesConfig.InfisicalClient,
-			projectID:       planRequest.ProjectID,
+			RepoURL:         planRequest.RepoURL,
+			GitHubToken:     planRequest.GitHubToken,
+			UserID:          planRequest.UserID,
+			MinioClient:     routesConfig.MinioClient,
+			InfisicalClient: routesConfig.InfisicalClient,
+			ProjectID:       planRequest.ProjectID,
 			context:         c.Request().Context(),
 		})
 
@@ -65,11 +65,11 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 		githubToken := c.Request().Header.Get("Authorization")
 
 		orchestrator := NewOrchestrator(&NewOrchestratorInput{
-			minioClient:     routesConfig.MinioClient,
-			infisicalClient: routesConfig.InfisicalClient,
+			MinioClient:     routesConfig.MinioClient,
+			InfisicalClient: routesConfig.InfisicalClient,
 			context:         c.Request().Context(),
-			gitHubToken:     githubToken,
-			repoURL:         repoURL,
+			GitHubToken:     githubToken,
+			RepoURL:         repoURL,
 		})
 
 		response, err := orchestrator.GetConversation(conversationID)
@@ -78,5 +78,26 @@ func SetupRoutes(routesConfig *OrchestratorRoutesConfig) {
 		}
 
 		return c.JSON(http.StatusOK, response)
+	})
+
+	e.DELETE("/conversations/:conversationID/messages/:commitHash", func(c echo.Context) error {
+		conversationID := c.Param("conversationID")
+		commitHash := c.Param("commitHash")
+		repoURL := c.QueryParam("repo_url")
+		githubToken := c.Request().Header.Get("Authorization")
+
+		orchestrator := NewOrchestrator(&NewOrchestratorInput{
+			MinioClient:     routesConfig.MinioClient,
+			InfisicalClient: routesConfig.InfisicalClient,
+			context:         c.Request().Context(),
+			GitHubToken:     githubToken,
+			RepoURL:         repoURL,
+		})
+
+		if err := orchestrator.DeleteCommit(conversationID, commitHash); err != nil {
+			return c.String(http.StatusInternalServerError, fmt.Sprintf("Error deleting message: %v", err))
+		}
+
+		return c.NoContent(http.StatusNoContent)
 	})
 }

@@ -16,63 +16,63 @@ import (
 )
 
 type Orchestrator struct {
-	repoURL         string
-	gitHubToken     string
-	userID          string
-	projectID       string
-	minioClient     minio.MinioClient
-	infisicalClient infisical.InfisicalClient
+	RepoURL         string
+	GitHubToken     string
+	UserID          string
+	ProjectID       string
+	MinioClient     minio.MinioClient
+	InfisicalClient infisical.InfisicalClient
 	context         context.Context
 }
 
 type NewOrchestratorInput struct {
-	repoURL         string
-	gitHubToken     string
-	userID          string
-	projectID       string
-	minioClient     minio.MinioClient
-	infisicalClient infisical.InfisicalClient
+	RepoURL         string
+	GitHubToken     string
+	UserID          string
+	ProjectID       string
+	MinioClient     minio.MinioClient
+	InfisicalClient infisical.InfisicalClient
 	context         context.Context
 }
 
 func NewOrchestrator(config *NewOrchestratorInput) *Orchestrator {
 	return &Orchestrator{
-		repoURL:         config.repoURL,
-		gitHubToken:     config.gitHubToken,
-		userID:          config.userID,
-		projectID:       config.projectID,
-		minioClient:     config.minioClient,
-		infisicalClient: config.infisicalClient,
+		RepoURL:         config.RepoURL,
+		GitHubToken:     config.GitHubToken,
+		UserID:          config.UserID,
+		ProjectID:       config.ProjectID,
+		MinioClient:     config.MinioClient,
+		InfisicalClient: config.InfisicalClient,
 		context:         config.context,
 	}
 }
 
-func (o *Orchestrator) cloneAndNavigateToRepo() error {
+func (o *Orchestrator) CloneAndNavigateToRepo() (string, error) {
 	tmpDir, err := os.MkdirTemp("/var/tmp/", "cloned-repo-")
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
 	// Now go to this temporary directory
 	log.Printf("Changing to temp directory: %s", tmpDir)
 	if err := os.Chdir(tmpDir); err != nil {
-		return fmt.Errorf("failed to change dir: %w", err)
+		return "", fmt.Errorf("failed to change dir: %w", err)
 	}
 
 	// Export GitHub token for authentication
 	log.Printf("Setting GH_TOKEN environment variable")
-	if err := os.Setenv("GH_TOKEN", o.gitHubToken); err != nil {
-		return fmt.Errorf("failed to set GH_TOKEN env: %w", err)
+	if err := os.Setenv("GH_TOKEN", o.GitHubToken); err != nil {
+		return "", fmt.Errorf("failed to set GH_TOKEN env: %w", err)
 	}
 
 	// Clone the repository
 	log.Printf("Cloning repository into temp directory")
-	cmd := exec.Command("git", "clone", o.repoURL, ".")
+	cmd := exec.Command("git", "clone", o.RepoURL, ".")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to clone repo: %s, %w", string(output), err)
+		return "", fmt.Errorf("failed to clone repo: %s, %w", string(output), err)
 	}
 
-	return nil
+	return tmpDir, nil
 }
 
 func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
@@ -81,7 +81,7 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 		return fmt.Errorf("error creating .terraform directory: %w", err)
 	}
 
-	if err := o.minioClient.DownloadFileObject(o.context, bucketName, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
+	if err := o.MinioClient.DownloadFileObject(o.context, bucketName, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
 		// Create the file if it does not exist
 		if err := os.NewFile(0, ".terraform/terraform.tfstate").Close(); err != nil {
 			return fmt.Errorf("error creating empty terraform.tfstate: %w", err)
@@ -93,32 +93,53 @@ func (o *Orchestrator) downloadOrCreateTFStateFile(bucketName string) error {
 	return nil
 }
 
-func (o *Orchestrator) getOrCreateBranch(branchName string) error {
+func (o *Orchestrator) remoteBranchExists(branchName string) bool {
+	// Check if branch exists on remote
+	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
+func (o *Orchestrator) pushToRemote(branchName string) error {
+	// Push the branch to remote
+	cmd := exec.Command("git", "push", "-u", "origin", branchName)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push branch %s to remote: %s, %w", branchName, string(output), err)
+	}
+	return nil
+}
+
+func (o *Orchestrator) GetOrCreateBranch(branchName string) error {
 	// Clone and navigate to the repository
-	if err := o.cloneAndNavigateToRepo(); err != nil {
+	if _, err := o.CloneAndNavigateToRepo(); err != nil {
 		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
 
-	// Check if branch exists locally
-	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
-	if err := cmd.Run(); err != nil {
+	// Check if branch exists
+	if !o.remoteBranchExists(branchName) {
 		// Branch does not exist, create it
-		cmd = exec.Command("git", "checkout", "-b", branchName)
+		cmd := exec.Command("git", "checkout", "-b", branchName)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to create branch %s: %s, %w", branchName, string(output), err)
 		}
 	} else {
 		// Branch exists, checkout to it
-		cmd = exec.Command("git", "checkout", branchName)
+		if err := o.checkoutLocalBranch(branchName); err != nil {
+			return fmt.Errorf("error in checkoutLocalBranch: %w", err)
+		}
+
+		// Pull the latest changes
+		cmd := exec.Command("git", "pull", "origin", branchName)
 		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to checkout to branch %s: %s, %w", branchName, string(output), err)
+			return fmt.Errorf("failed to pull latest changes for branch %s: %s, %w", branchName, string(output), err)
 		}
 	}
 
 	// Push the branch to remote
-	cmd = exec.Command("git", "push", "-u", "origin", branchName)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to push branch %s to remote: %s, %w", branchName, string(output), err)
+	if err := o.pushToRemote(branchName); err != nil {
+		return fmt.Errorf("error in pushToRemote: %w", err)
 	}
 
 	return nil
@@ -193,9 +214,46 @@ func handleGetTerraformFiles(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+func (o *Orchestrator) checkoutLocalBranch(branchName string) error {
+	// Checkout to the branch
+	cmd := exec.Command("git", "checkout", branchName)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to checkout to branch %s: %s, %w", branchName, string(output), err)
+	}
+	return nil
+}
+
+func (o *Orchestrator) DeleteCommit(conversationID, commitHash string) error {
+	// Clone and navigate to the repository
+	if _, err := o.CloneAndNavigateToRepo(); err != nil {
+		return fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
+	}
+	log.Printf("Successfully cloned and navigated to repo")
+
+	// Checkout to the conversation branch
+	if err := o.checkoutLocalBranch(conversationID); err != nil {
+		return fmt.Errorf("error in checkoutLocalBranch: %w", err)
+	}
+	log.Printf("Checked out to branch: %s", conversationID)
+
+	// Delete the commit by resetting to the previous commit
+	cmd := exec.Command("git", "reset", "--hard", commitHash+"^")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to reset commit %s: %s, %w", commitHash, string(output), err)
+	}
+	log.Printf("Reset to previous commit before: %s", commitHash)
+
+	if err := o.pushToRemote(conversationID); err != nil {
+		return fmt.Errorf("error in pushToRemote: %w", err)
+	}
+	log.Printf("Force pushed changes to branch: %s", conversationID)
+
+	return nil
+}
+
 func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, error) {
 	// Get or create the branch for the conversation
-	if err := o.getOrCreateBranch(conversationID); err != nil {
+	if err := o.GetOrCreateBranch(conversationID); err != nil {
 		return nil, fmt.Errorf("error in getOrCreateBranch: %w", err)
 	}
 	log.Printf("Successfully got or created branch for conversation ID: %s", conversationID)
@@ -215,13 +273,13 @@ func (o *Orchestrator) GetConversation(conversationID string) (*FilesResponse, e
 
 func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	// Clone and navigate to the repository
-	if err := o.cloneAndNavigateToRepo(); err != nil {
+	if _, err := o.CloneAndNavigateToRepo(); err != nil {
 		return nil, fmt.Errorf("error in cloneAndNavigateToRepo: %w", err)
 	}
 	log.Printf("Successfully cloned and navigated to repo")
 
 	// Check if the bucket exists, if not create it
-	bucket, err := o.minioClient.GetOrCreateBucket(o.context, o.userID)
+	bucket, err := o.MinioClient.GetOrCreateBucket(o.context, o.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("error in GetOrCreateBucket: %w", err)
 	}
@@ -232,9 +290,9 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	}
 
 	// Fetch and inject the secrets into the environment
-	secretsResponse := o.infisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
+	secretsResponse := o.InfisicalClient.ListSecrets(&infisical.InfisicalSecretOptions{
 		Environment: "dev",
-		ProjectID:   o.projectID,
+		ProjectID:   o.ProjectID,
 		SecretPath:  "/",
 	})
 	if secretsResponse.StatusCode != http.StatusOK || secretsResponse.Error != "" {
@@ -266,7 +324,7 @@ func (o *Orchestrator) Plan() (map[string]interface{}, error) {
 	log.Printf("Terraform plan executed successfully")
 
 	// Ensure that we save this state file
-	if err := o.minioClient.UploadFileObject(o.context, bucket.Name, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
+	if err := o.MinioClient.UploadFileObject(o.context, bucket.Name, "terraform.tfstate", ".terraform/terraform.tfstate"); err != nil {
 		return nil, fmt.Errorf("error uploading terraform.tfstate: %w", err)
 	}
 	log.Printf("Uploaded updated terraform.tfstate to bucket %s", bucket.Name)
