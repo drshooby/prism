@@ -24,8 +24,7 @@ export default async function Home() {
         <GodRays
           style={{
             position: "fixed",
-            zIndex: -2,
-            opacity: 0.5
+            zIndex: -2
           }}
           width={"100vw"}
           height={"100vh"}
@@ -41,7 +40,7 @@ export default async function Home() {
           offsetX={1}
           offsetY={-0.55}
         />
-        <DotGrid
+        {/*<DotGrid
           style={{
             position: "fixed",
             zIndex: -1,
@@ -59,7 +58,7 @@ export default async function Home() {
           sizeRange={0}
           opacityRange={0}
           shape="circle"
-        />
+        />*/}
         <div className={styles.content}>
           {/*<Dithering
             width={200}
@@ -71,9 +70,13 @@ export default async function Home() {
             size={8}
             speed={1}
           />*/}
-          <h1 className={styles.title}>{APP_NAME}</h1>
-          <p className={styles.description}>{APP_DESCRIPTION}</p>
-          <SignInOutWrapper />
+          <div className={styles.text}>
+            <h1 className={styles.title}>{APP_NAME}</h1>
+            <p className={styles.description}>{APP_DESCRIPTION}</p>
+          </div>
+          <div className={styles.cta}>
+            <SignInOutWrapper />
+          </div>
         </div>
       </main>
     </>

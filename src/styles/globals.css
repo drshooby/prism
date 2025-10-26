@@ -1,13 +1,9 @@
 :root {
-  --color-prism-blue: #005eff; /* hsla(218deg, 100%, 50%, 1) */
+  --color-prism-blue: hsla(218deg, 100%, 50%, 1); /* #005eff */
   --color-blueish-white: hsla(218deg, 50%, 98%, 1); /* #F7F9FC */
   --color-blueish-black: hsla(218deg, 50%, 2%, 1); /* #030408 */
-
-  --color-dark-blue: hsla(227deg, 50%, 22%, 1);
-  --color-dark-blue-10: hsla(227deg, 50%, 66%, 0.1);
-  --color-dark-blue-20: hsla(227deg, 50%, 22%, 0.2);
-  --color-dark-blue-70: hsla(227deg, 50%, 22%, 0.7);
-  --color-light-blue: hsla(227deg, 50%, 66%, 1);
+  --color-dark-blue: hsla(218deg, 50%, 22%, 1); /* #1C3154 */
+  --color-dark-blue-10: hsla(218deg, 50%, 66%, 0.1);
 
   --color-background: var(--color-blueish-black);
   --color-foreground: var(--color-blueish-white);

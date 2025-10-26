@@ -23,8 +23,9 @@ button.button {
 }
 
 button.button:hover {
-  background-color: var(--color-dark-blue);
-  color: var(--color-background);
+  background-color: var(--color-prism-blue);
+  color: var(--color-foreground);
+  border: 2px solid transparent;
 }
 
 button.button:active {
