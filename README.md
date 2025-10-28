@@ -164,7 +164,7 @@ go mod download
 go run .
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 prism/
