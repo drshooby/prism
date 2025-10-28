@@ -4,7 +4,7 @@
 
 Prism is a CalHacks 12.0 project that enables developers and DevOps teams to visualize their infrastructure and interact with it through natural language interfaces. Built with modern web technologies and a microservices architecture, Prism provides an intuitive way to manage and understand complex infrastructure setups.
 
-## 🚀 Technology Stack
+## Technology Stack
 
 ### Frontend
 - **Next.js 15** - React framework with App Router and Turbopack
@@ -34,7 +34,7 @@ Prism is a CalHacks 12.0 project that enables developers and DevOps teams to vis
 - **LLM Integration** - Natural language processing capabilities
 - **Orchestrator** - Service coordination and workflow management
 
-## 🏗️ Architecture
+## Architecture
 
 Prism follows a microservices architecture with the following components:
 
@@ -60,13 +60,13 @@ Prism follows a microservices architecture with the following components:
 - **MinIO**: Object storage for artifacts and files
 - **Infisical**: Centralized secrets management for secure credential storage
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Docker and Docker Compose
 - Node.js 22+ and npm
 - Go 1.25+ (for local development)
 
-## 🛠️ Getting Started
+## Getting Started
 
 ### 1. Environment Setup
 
@@ -117,7 +117,7 @@ This will start:
 
 Access the application at `http://localhost:3000`
 
-## 🏃 Development
+## Development
 
 ### Frontend Development
 
@@ -194,7 +194,7 @@ prism/
 └── package.json         # Node.js dependencies
 ```
 
-## 🔗 Useful Links
+## Useful Links
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [T3 Stack](https://create.t3.gg/)
@@ -203,10 +203,10 @@ prism/
 - [Infisical](https://infisical.com/docs)
 - [MinIO](https://min.io/docs/minio/linux/index.html)
 
-## 📝 License
+## License
 
 This project was created for CalHacks 12.0.
 
-## 🤝 Contributing
+## Contributing
 
 This is a hackathon project. Feel free to fork and experiment!
