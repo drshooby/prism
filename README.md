@@ -12,7 +12,7 @@ Prism is a CalHacks 12.0 project that enables developers and DevOps teams to vis
 - **TypeScript** - Type-safe development
 - **Tailwind CSS** - Utility-first styling
 - **tRPC** - End-to-end type-safe APIs
-- **NextAuth.js** - Authentication with Discord provider
+- **NextAuth.js** - Authentication with GitHub provider
 - **@paper-design/shaders-react** - Visual effects and animations
 
 ### Backend
